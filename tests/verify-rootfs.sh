@@ -305,9 +305,9 @@ uci commit fstab
 cp /etc/config/fstab "$verify_tmp/user.fstab"
 apply_data_mount_default
 cmp -s "$verify_tmp/user.fstab" /etc/config/fstab || fail 'kept data mount was changed'
-# Kept settings: the data label mounted elsewhere, as by earlier firmware at
-# /mnt/data; no second mount of the same partition is added.
-uci set "fstab.$data_section.target=/mnt/data"
+# Kept settings: the data label moved to another mount point in LuCI; no
+# second mount of the same partition is added.
+uci set "fstab.$data_section.target=/srv"
 uci delete "fstab.$data_section.uuid"
 uci set "fstab.$data_section.label=data"
 uci commit fstab
