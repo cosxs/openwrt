@@ -64,7 +64,9 @@ set_var() {
     local key=$1 value=$2 old
     old=$(sed -n "s/^$key=//p" "$env_file")
     [[ $old != "$value" ]] || return 0
-    sed "s|^$key=.*|$key=$value|" "$env_file" > "$work/env"
+    # ENVIRON passes the value literally, unlike sed replacements or awk -v.
+    KEY=$key VALUE=$value awk -F = '$1 == ENVIRON["KEY"] { $0 = $1 "=" ENVIRON["VALUE"] } 1' \
+        "$env_file" > "$work/env"
     cat "$work/env" > "$env_file"
     echo "$key: $old -> $value"
 }

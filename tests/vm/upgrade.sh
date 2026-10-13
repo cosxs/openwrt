@@ -23,7 +23,12 @@ lines_before=$(wc -l < "$serial")
 boots_before=$(grep -ac 'Linux version' "$serial")
 # Run in the foreground: procd takes over the upgrade and the session drops.
 timeout 300 bash -c '. "$1"; vm "sysupgrade -v /tmp/fw.img.gz"' _ "$VM_DIR/lib.sh" || true
-sleep 60
+# Poll SSH only once the upgraded system's kernel starts; until then the old
+# system may still answer.
+for _ in $(seq 120); do
+    [ "$(grep -ac 'Linux version' "$serial")" -gt "$boots_before" ] && break
+    sleep 5
+done
 wait_for_router 1800 || { tail -n +"$lines_before" "$serial" | tail -40; exit 1; }
 echo "== 串口中的升级记录"
 tail -n +"$lines_before" "$serial" | grep -aiE "partition|writing|upgrade|saving|restor|sysupgrade|Linux version" | head -20

@@ -8,7 +8,7 @@ case "$1" in
     /*) ;;
     *) echo 'rootfs path must be absolute' >&2; exit 2 ;;
 esac
-verify_root=$(CDPATH= cd "$1" && pwd -P) || exit 2
+verify_root=$(CDPATH='' cd "$1" && pwd -P) || exit 2
 [ "$verify_root" != / ] || { echo 'refusing the host root directory' >&2; exit 2; }
 [ "$(id -u)" -eq 0 ] || { echo 'run as root inside the isolated Linux container' >&2; exit 2; }
 for verify_file in \
@@ -41,6 +41,15 @@ mkdir -p /tmp/.uci /tmp/sysinfo /proc/sys/net/ipv6 /dev
 # Real preinit populates sysinfo before board detection; model that input.
 [ -s /tmp/sysinfo/board_name ] || printf "generic\n" > /tmp/sysinfo/board_name
 [ -s /tmp/sysinfo/model ] || printf "x86-64 verification fixture\n" > /tmp/sysinfo/model
+# board.d reads the network interfaces from sysfs; model a four-port machine.
+set_interfaces() {
+    rm -rf /sys/class/net
+    mkdir -p /sys/class/net
+    for name in "$@"; do
+        mkdir "/sys/class/net/$name"
+    done
+}
+set_interfaces eth0 eth1 eth2 eth3
 # A regular sink suffices for these userspace-only tests if the rootfs has no node.
 [ -e /dev/null ] || : > /dev/null
 verify_tmp=$(mktemp -d /tmp/rootfs-verify.XXXXXX)
@@ -56,6 +65,11 @@ assert_equal() {
 assert_unchanged_services() {
     cmp -s "$verify_tmp/dhcp" /etc/config/dhcp || fail 'DHCP configuration changed'
     cmp -s "$verify_tmp/firewall" /etc/config/firewall || fail 'firewall configuration changed'
+}
+lan_ports() {
+    for section in $(uci -q show network | sed -n 's/^network\.\([^=]*\)=device$/\1/p'); do
+        [ "$(uci -q get "network.$section.name" || :)" != br-lan ] || uci -q get "network.$section.ports"
+    done
 }
 assert_factory_network() {
     assert_equal br-lan "$(uci -q get network.lan.device)" 'LAN device'
@@ -137,6 +151,28 @@ rm -f /etc/config/network
 assert_factory_network
 cmp -s "$verify_tmp/factory.network" /etc/config/network || fail 'factory reset simulation did not restore default network'
 echo 'PASS: removing network settings restores the factory layout; DHCP/firewall unchanged'
+
+# 4b. Other port counts: eth0 is the WAN and every other ethN, in numeric
+# order, a LAN port; a lone eth0 leaves no LAN.
+generate_for_interfaces() {
+    set_interfaces "$@"
+    rm -f /etc/board.json /etc/config/network
+    /bin/board_detect
+    /bin/config_generate
+}
+generate_for_interfaces eth0 eth1
+assert_equal eth1 "$(lan_ports)" 'LAN ports of a two-port machine'
+assert_equal eth0 "$(uci -q get network.wan.device)" 'WAN device of a two-port machine'
+generate_for_interfaces eth0 eth1 eth2 eth10 eth3 lo docker0
+assert_equal 'eth1 eth2 eth3 eth10' "$(lan_ports)" 'LAN ports of a machine with eth10'
+generate_for_interfaces eth0
+assert_equal eth0 "$(uci -q get network.wan.device)" 'WAN device of a single-port machine'
+assert_equal '' "$(uci -q get network.lan || :)" 'LAN of a single-port machine'
+assert_equal '' "$(lan_ports)" 'LAN ports of a single-port machine'
+generate_for_interfaces eth0 eth1 eth2 eth3
+cmp -s "$verify_tmp/factory.network" /etc/config/network || fail 'four-port layout differs from the factory network'
+assert_unchanged_services
+echo 'PASS: eth0 is the WAN and every other ethN a LAN port, in numeric order; a single eth0 leaves no LAN'
 
 # 5. Initial root password, applied the way /etc/init.d/boot runs uci-defaults.
 root_password_field() {

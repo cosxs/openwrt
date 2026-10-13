@@ -1,7 +1,12 @@
 #!/bin/sh
 
-# board_detect sets CFG to its temporary board file. Saved UCI settings are
-# handled by config_generate and are not modified here.
+# Factory network, hostname and timezone. board_detect sets CFG to its
+# temporary board file. Saved UCI settings are handled by config_generate and
+# are not modified here.
+#
+# eth0 is the WAN and every other ethN a LAN port; without other ports there is
+# no LAN. This runs in preinit, when the interfaces of the network drivers
+# loaded at boot (/etc/modules-boot.d) exist.
 [ -n "${CFG:-}" ] || exit 1
 
 ucode -l fs -e '
@@ -14,10 +19,13 @@ let board = json(source);
 if (type(board) != "object")
     die("Board configuration is not an object\n");
 
-board.network = {
-    lan: { ports: [ "eth1", "eth2", "eth3" ], protocol: "static", ipaddr: "192.168.72.1" },
-    wan: { device: "eth0", protocol: "dhcp" }
-};
+let lan_ports = sort(
+    filter(fs.lsdir("/sys/class/net") ?? [], (name) => match(name, /^eth[0-9]+$/) && name != "eth0"),
+    (a, b) => +substr(a, 3) - +substr(b, 3)
+);
+board.network = { wan: { device: "eth0", protocol: "dhcp" } };
+if (length(lan_ports))
+    board.network.lan = { ports: lan_ports, protocol: "static", ipaddr: "192.168.72.1" };
 
 // config_generate has no zone name field; uci-defaults completes it for LuCI.
 if (type(board.system) != "object")
@@ -32,4 +40,3 @@ if (fs.writefile(temporary, output) != length(output))
 if (!fs.rename(temporary, path))
     die("Cannot replace board configuration\n");
 ' "$CFG"
-

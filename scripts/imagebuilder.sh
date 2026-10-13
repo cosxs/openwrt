@@ -24,15 +24,22 @@ while IFS= read -r apk; do
     tar -xzf "$archive" -C packages "./$apk"
 done < /work/profiles/nikki-apks.txt
 
-singbox_apk="/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk"
-echo "$SINGBOX_APK_SHA256  $singbox_apk" | sha256sum --check --status
-# apk finds local packages as <name>-<version>.apk; the upstream asset name
-# differs, and its package version is ${SINGBOX_VERSION}-r0.
-cp "$singbox_apk" "packages/sing-box-${SINGBOX_VERSION}-r0.apk"
-
-argon_apk="/work/.build/downloads/luci-theme-argon-${ARGON_VERSION}.apk"
-echo "$ARGON_APK_SHA256  $argon_apk" | sha256sum --check --status
-cp "$argon_apk" packages/
+# apk finds local packages as <name>-<version>.apk, whatever the release asset
+# is called; both are read from the package metadata.
+import_apk() {
+    local file=$1 sha256=$2 name version
+    echo "$sha256  $file" | sha256sum --check --status
+    name=$(apk_field "$file" name)
+    version=$(apk_field "$file" version)
+    [[ -n $name && -n $version ]] || { echo "No package metadata in $file" >&2; exit 1; }
+    cp "$file" "packages/$name-$version.apk"
+}
+apk_field() {
+    staging_dir/host/bin/apk --allow-untrusted adbdump "$1" |
+        sed -n "/^info:/,/^[a-z]/s/^  $2: //p"
+}
+import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
+import_apk "/work/.build/downloads/luci-theme-argon-${ARGON_VERSION}.apk" "$ARGON_APK_SHA256"
 
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
     /work/profiles/packages.txt | tr '\n' ' ')

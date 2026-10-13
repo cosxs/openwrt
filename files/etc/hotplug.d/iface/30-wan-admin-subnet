@@ -9,7 +9,8 @@ case "$ACTION" in
     *) exit 0 ;;
 esac
 
-subnet=
+subnet=''
+cidr=''
 if [ "$ACTION" != ifdown ]; then
     . /lib/functions/network.sh
     if network_get_subnet cidr wan; then
