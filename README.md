@@ -63,8 +63,8 @@ sudo tests/vm/run.sh artifacts/<版本>/<时间>/*-squashfs-combined-efi.img.gz
 
 GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
-- 触发：推送到 `main`（配方、脚本、测试或工作流有改动时）、每天北京时间 03:37 定时运行，以及手动运行（可选“强制构建”）。
-- 定时和手动运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest、Nikki、sing-box 和 Argon。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
+- 触发：每天北京时间 03:37 定时运行，以及在 Actions 页面手动运行（可选“强制构建”）。推送代码不会触发构建，配方的改动在下一次定时或手动运行时构建发布。
+- 每次运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest、Nikki、sing-box 和 Argon。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
 - 然后只解析软件包（`build.sh --manifest-only`），由 `scripts/build-state.sh` 计算配方文件和包清单的状态，与最近一次 Release 附带的 `build-state.txt` 比较；没有变化就结束，不构建。官方软件源里的包更新也会体现在包清单里。
 - 有变化时构建，依次运行镜像检查和虚拟机测试（GitHub 的 Linux runner 支持 KVM）。全部通过后由 `scripts/release.sh` 发布：先把更新后的固定版本提交并推送到 `main`，再创建 Release，附带磁盘镜像、包清单、构建信息、`build-state.txt`、检查日志和 `SHA256SUMS`，说明里列出配方更新和相对上一个 Release 的软件包版本变化。任何一步失败都不提交、不发布，GitHub 会发邮件通知。
 - 不会自动刷机：刷机仍按“写盘”或保留配置的 sysupgrade 手动进行。
