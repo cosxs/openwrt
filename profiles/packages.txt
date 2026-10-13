@@ -20,6 +20,9 @@ docker
 docker-compose
 luci-app-dockerman
 luci-i18n-dockerman-zh-cn
+# LuCI page for the ttyd web terminal that luci-app-dockerman pulls in.
+luci-app-ttyd
+luci-i18n-ttyd-zh-cn
 # Lets dockerd clear the connection tracking entries of removed containers.
 kmod-nf-conntrack-netlink
 ddns-scripts

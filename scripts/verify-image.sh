@@ -39,6 +39,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-dockerman.json
         test -n "$(find /tmp/inspect-root/lib/modules -name nf_conntrack_netlink.ko)"
         echo "PASS: actual image contains Docker, Compose, conntrack netlink and the Docker LuCI page"
+        test -x /tmp/inspect-root/usr/bin/ttyd
+        test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ttyd.json
+        echo "PASS: actual image contains ttyd and its LuCI page"
         test -x /tmp/inspect-root/usr/lib/ddns/update_cloudflare_com_v4.sh
         test -f /tmp/inspect-root/usr/share/ddns/default/cloudflare.com-v4.json
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ddns.json
@@ -46,7 +49,7 @@ docker run --rm --platform linux/amd64 --user root --network none \
         grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
             grep -qx "V:$ARGON_VERSION"
         echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
-        for lmo in base firewall package-manager dockerman ddns nikki; do
+        for lmo in base firewall package-manager dockerman ttyd ddns nikki; do
             test -f "/tmp/inspect-root/usr/lib/lua/luci/i18n/$lmo.zh-cn.lmo"
         done
         echo "PASS: actual image contains the Chinese translations of every LuCI page"
