@@ -87,6 +87,8 @@ check 'data partition name in the partition table' data "$(vm 'blkid -p -o value
 check 'data partition reaches the end of the disk' yes "$(vm 'p=/sys/class/block/nvme0n1p3; [ $(($(cat $p/start) + $(cat $p/size))) -gt $(($(cat /sys/class/block/nvme0n1/size) - 4096)) ] && echo yes || echo no')"
 vm 'dmesg | grep data-partition'
 check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
+check 'data mount shared' yes "$(vm 'grep " /data " /proc/self/mountinfo | grep -q " shared:" && echo yes || echo no')"
+check 'separate mount for the Docker data root' 0 "$(vm 'grep -c " /data/docker " /proc/mounts')"
 vm 'docker version --format "docker server {{.Server.Version}}"; docker compose version'
 vm 'uci show firewall | grep -E "docker" | head -8; uci show network.docker 2>/dev/null | head -4'
 

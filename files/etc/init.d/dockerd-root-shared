@@ -1,0 +1,25 @@
+#!/bin/sh /etc/rc.common
+
+# dockerd wants the mount that holds its data root to propagate mounts. Every
+# mount on OpenWrt is private, so dockerd bind-mounts the data root onto itself
+# to make it shared, and LuCI lists the data partition a second time under
+# /data/docker. Make the mount holding the data root shared before dockerd
+# starts, as systemd does for every mount on other systems. The root file
+# system is left alone: dockerd cannot keep its data on the overlay anyway.
+
+START=12
+
+start() {
+    local dir mount_point
+
+    dir=$(uci -q get dockerd.globals.data_root) || return 0
+    case "$dir" in /*) ;; *) return 0 ;; esac
+    # The data root itself appears only when dockerd first starts.
+    while [ -n "$dir" ] && [ ! -d "$dir" ]; do
+        dir=${dir%/*}
+    done
+    [ -n "$dir" ] || return 0
+    mount_point=$(df -P "$dir" 2> /dev/null | awk 'NR == 2 {print $6}')
+    [ -n "$mount_point" ] && [ "$mount_point" != / ] || return 0
+    mount --make-shared "$mount_point"
+}

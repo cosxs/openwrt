@@ -45,6 +45,7 @@ check 'LAN address kept' 192.168.72.1/24 "$(vm 'ip -4 -o addr show br-lan' | awk
 check 'data marker' kept "$(vm 'cat /data/marker')"
 check 'docker images kept' "$images_before" "$(vm 'docker images --format "{{.Repository}}:{{.Tag}}" | sort | xargs')"
 check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
+check 'separate mount for the Docker data root' 0 "$(vm 'grep -c " /data/docker " /proc/mounts')"
 check 'pending uci-defaults' '' "$(vm 'ls /etc/uci-defaults' | xargs)"
 check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 vm 'cat /proc/partitions | grep nvme'

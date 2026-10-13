@@ -18,7 +18,7 @@ for verify_file in \
     etc/uci-defaults/10-fstab etc/uci-defaults/93-data-mount \
     etc/uci-defaults/96-data-partition lib/upgrade/common.sh \
     lib/preinit/01_sysinfo lib/preinit/01_sysinfo_dmi_default \
-    etc/uci-defaults/94-dockerd-defaults etc/config/dockerd \
+    etc/uci-defaults/94-dockerd-defaults etc/config/dockerd etc/init.d/dockerd-root-shared \
     etc/uci-defaults/95-docker-firewall \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
     lib/functions/network.sh bin/ipcalc.sh \
@@ -612,5 +612,46 @@ assert_equal 'Default Default|default-default' \
 rm -rf /sys/devices /tmp/sysinfo
 cp -a "$verify_tmp/sysinfo" /tmp/sysinfo
 echo 'PASS: a bare Default in the DMI system fields falls back to the board vendor and name; other names are kept'
+# 15. Shared mount for the Docker data root before dockerd starts. df and mount
+# are stubs that record their calls; df reports TEST_MOUNT as the mount point.
+cat > "$verify_tmp/stub/df" <<'STUB'
+#!/bin/sh
+echo "df $*" >> "$CALLS"
+printf 'Filesystem 1024-blocks Used Available Capacity Mounted on\n'
+printf '/dev/test 1000 0 1000 0%% %s\n' "$TEST_MOUNT"
+STUB
+printf '#!/bin/sh\necho "mount $*" >> "$CALLS"\n' > "$verify_tmp/stub/mount"
+chmod 755 "$verify_tmp/stub/df" "$verify_tmp/stub/mount"
+cp /etc/config/dockerd "$verify_tmp/shared.dockerd"
+# root_shared DATA_ROOT MOUNT_POINT; an empty DATA_ROOT removes the option.
+root_shared() {
+    if [ -n "$1" ]; then
+        uci set dockerd.globals.data_root="$1"
+    else
+        uci -q delete dockerd.globals.data_root || :
+    fi
+    uci commit dockerd
+    : > "$verify_tmp/mount.calls"
+    (
+        export PATH="$verify_tmp/stub:$PATH" CALLS="$verify_tmp/mount.calls" TEST_MOUNT="$2"
+        /etc/rc.common /etc/init.d/dockerd-root-shared start
+    ) || fail 'dockerd root propagation failed'
+    cat "$verify_tmp/mount.calls"
+}
+mkdir -p /mnt/verify-data /mnt/verify-root
+assert_equal 'df -P /mnt/verify-data
+mount --make-shared /mnt/verify-data' "$(root_shared /mnt/verify-data/docker/ /mnt/verify-data)" \
+    'commands before dockerd created its data root'
+mkdir -p /mnt/verify-data/docker
+assert_equal 'df -P /mnt/verify-data/docker/
+mount --make-shared /mnt/verify-data' "$(root_shared /mnt/verify-data/docker/ /mnt/verify-data)" \
+    'commands with an existing data root'
+assert_equal 'df -P /mnt/verify-root' "$(root_shared /mnt/verify-root/docker/ /)" \
+    'commands with the data root on the root file system'
+assert_equal '' "$(root_shared '' /mnt/verify-data)" 'commands without a data root'
+assert_equal '' "$(root_shared docker /mnt/verify-data)" 'commands with a relative data root'
+rm -rf /mnt/verify-data /mnt/verify-root
+cp "$verify_tmp/shared.dockerd" /etc/config/dockerd
+echo 'PASS: the mount holding the Docker data root is made shared before dockerd starts; the root file system is left alone'
 echo 'PASS: rootfs userspace verification complete (no network activation or hardware boot test)'
 INNER

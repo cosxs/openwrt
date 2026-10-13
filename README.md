@@ -16,7 +16,7 @@
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
 | 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
 | 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、Nikki 及 Mihomo stable 核心、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
-| Docker | 数据目录 `/data/docker/`；随系统启动。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）只监听 LAN 的 7681 端口，需 root 登录 |
+| Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）只监听 LAN 的 7681 端口，需 root 登录 |
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
 | Nikki 初始状态 | 保留上游默认关闭，导入配置后再启用 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1` |
@@ -48,7 +48,7 @@
 ./scripts/verify-image.sh artifacts/<版本>/<时间>/*-squashfs-rootfs.img.gz
 ```
 
-检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置，Argon 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 Nikki 默认关闭、Mihomo 核心存在、BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
+检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置、开机时把 Docker 数据目录所在的挂载点设为 shared（根文件系统除外），Argon 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 Nikki 默认关闭、Mihomo 核心存在、BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
 
 `tests/vm/` 在 QEMU 虚拟机里测试完整磁盘镜像（需要 root、`qemu-system-x86`、`ovmf`、`sshpass`、`busybox`，有 KVM 时自动使用）：
 
@@ -86,6 +86,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区，条件见“写盘”。中途中断（已建分区、尚未格式化）时下次启动只补做格式化；已有文件系统的数据分区从不重新格式化。
 - `files/etc/uci-defaults/93-data-mount`：fstab 里还没有挂载卷标 `data` 的分区、也没有挂到 `/data` 的条目时，添加按卷标 `data` 挂载到 `/data` 的条目。
 - `files/etc/uci-defaults/94-dockerd-defaults`：dockerd 配置仍是出厂版本时，把数据目录改到 `/data/docker/`，并让 WAN→docker0 的阻断规则只拦截新连接。OpenWrt 的根目录是 overlayfs，不能承载 Docker 的 overlay 存储，系统分区的可写层也会在每次 sysupgrade 时清空；dockerd 默认的阻断规则不区分连接状态，会把容器自己发起的连接的回包一并拒绝，容器因此无法上网。
+- `files/etc/init.d/dockerd-root-shared`：开机第 12 位运行（`fstab` 挂载之后、`dockerd` 之前），把 dockerd 数据目录所在的挂载点设为 shared 传播。dockerd 要求这个挂载点是 shared，OpenWrt 上的挂载都是 private，dockerd 就会把数据目录原地再挂一次并设为 shared；先设好就不会多出这个挂载，与其他用 systemd 的系统一致。数据目录还不存在时按最近的上级目录查找；数据目录在根文件系统上时不改动根文件系统。
 - `files/etc/uci-defaults/95-docker-firewall`：还没有 `docker` 防火墙区域时，按 dockerd 自身 `uciadd` 的命名预先建好 `docker` 接口、`docker0` 网桥和区域，并加上 docker→wan、lan→docker 转发。fw4 不放行没有 forwarding 的跨区流量，只靠 dockerd 建的区域，容器无法上网。
 - `scripts/build.sh`、`scripts/imagebuilder.sh`：本地和 CI 共用的构建入口。
 - `scripts/verify-image.sh`、`tests/verify-rootfs.sh`：镜像内容检查；`tests/vm/`：虚拟机测试。

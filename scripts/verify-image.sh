@@ -37,8 +37,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         chroot /tmp/inspect-root /usr/bin/docker --version
         chroot /tmp/inspect-root /usr/bin/docker-compose version
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-dockerman.json
+        test -L /tmp/inspect-root/etc/rc.d/S12dockerd-root-shared
         test -n "$(find /tmp/inspect-root/lib/modules -name nf_conntrack_netlink.ko)"
-        echo "PASS: actual image contains Docker, Compose, conntrack netlink and the Docker LuCI page"
+        echo "PASS: actual image contains Docker, Compose, conntrack netlink, the Docker LuCI page and the enabled data root propagation"
         test -x /tmp/inspect-root/usr/bin/ttyd
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ttyd.json
         echo "PASS: actual image contains ttyd and its LuCI page"
