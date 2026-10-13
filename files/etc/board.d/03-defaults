@@ -26,7 +26,7 @@ board.system.hostname = "linuxserver";
 board.system.timezone = "CST-8";
 
 let output = sprintf("%J\n", board);
-let temporary = path + ".n100";
+let temporary = path + ".tmp";
 if (fs.writefile(temporary, output) != length(output))
     die("Cannot write board configuration\n");
 if (!fs.rename(temporary, path))

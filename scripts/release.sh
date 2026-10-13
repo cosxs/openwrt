@@ -40,7 +40,7 @@ fi
 
 notes="$dir/release-notes.md"
 {
-    echo "N100 固件，OpenWrt $OPENWRT_VERSION（ImageBuilder \`${IMAGEBUILDER_IMAGE#*@}\`）。"
+    echo "x86-64 定制固件，OpenWrt $OPENWRT_VERSION（ImageBuilder \`${IMAGEBUILDER_IMAGE#*@}\`）。"
     echo
     echo "写盘和升级都用 \`${image##*/}\`："
     echo
@@ -104,5 +104,5 @@ if ! git diff --quiet -- profiles; then
     git push -q origin "HEAD:$branch"
 fi
 gh release create "$tag" "${files[@]}" --target "$(git rev-parse HEAD)" \
-    --title "N100 OpenWrt $OPENWRT_VERSION · ${run_id:0:4}-${run_id:4:2}-${run_id:6:2}" \
+    --title "OpenWrt $OPENWRT_VERSION x86-64 · ${run_id:0:4}-${run_id:4:2}-${run_id:6:2}" \
     --notes-file "$notes"

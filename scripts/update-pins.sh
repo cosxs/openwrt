@@ -11,7 +11,7 @@
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-env_file="$project_dir/profiles/n100.env"
+env_file="$project_dir/profiles/build.env"
 apks_file="$project_dir/profiles/nikki-apks.txt"
 source "$env_file"
 series=${OPENWRT_VERSION%.*}

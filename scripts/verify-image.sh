@@ -6,7 +6,7 @@ set -euo pipefail
     exit 2
 }
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-source "$project_dir/profiles/n100.env"
+source "$project_dir/profiles/build.env"
 image_dir=$(cd "$(dirname "$1")" && pwd)
 image_name=$(basename "$1")
 

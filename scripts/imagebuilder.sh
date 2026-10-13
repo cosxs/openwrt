@@ -35,7 +35,7 @@ echo "$ARGON_APK_SHA256  $argon_apk" | sha256sum --check --status
 cp "$argon_apk" packages/
 
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
-    /work/profiles/n100.packages | tr '\n' ' ')
+    /work/profiles/packages.txt | tr '\n' ' ')
 
 if [[ ${MANIFEST_ONLY:-} == 1 ]]; then
     make manifest PROFILE="$OPENWRT_PROFILE" PACKAGES="$packages" |
@@ -61,5 +61,4 @@ make image \
     PROFILE="$OPENWRT_PROFILE" \
     PACKAGES="$packages" \
     FILES=/work/files \
-    EXTRA_IMAGE_NAME="$EXTRA_IMAGE_NAME" \
     ROOTFS_PARTSIZE="$ROOTFS_PARTSIZE"

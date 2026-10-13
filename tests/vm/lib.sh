@@ -3,7 +3,7 @@
 # reached from a LAN client in network namespace "lanc", with the firmware's
 # documented initial password.
 VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
-VM_WORK=${VM_WORK:-/var/tmp/n100-vm}
+VM_WORK=${VM_WORK:-/var/tmp/openwrt-vm}
 OVMF_CODE=${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}
 OVMF_VARS=${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}
 export SSHPASS=159357

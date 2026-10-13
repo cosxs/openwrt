@@ -13,7 +13,7 @@ if [[ $# -gt 0 ]]; then
 fi
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-profile_file="$project_dir/profiles/n100.env"
+profile_file="$project_dir/profiles/build.env"
 # This checked-in file contains public, fixed build inputs.
 source "$profile_file"
 
@@ -71,7 +71,7 @@ run_id=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="$project_dir/artifacts/$OPENWRT_VERSION/$run_id"
 mkdir -p "$output_dir"
 cp "$profile_file" "$output_dir/build.env"
-cp "$project_dir/profiles/n100.packages" "$output_dir/requested-packages.txt"
+cp "$project_dir/profiles/packages.txt" "$output_dir/requested-packages.txt"
 tar -czf "$output_dir/build-recipe.tar.gz" -C "$project_dir" \
     profiles files scripts tests .github/workflows/build.yml
 printf 'recipe_revision=%s\narchive_sha256=%s\nsingbox_apk_sha256=%s\nargon_apk_sha256=%s\n' \

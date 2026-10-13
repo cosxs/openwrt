@@ -9,8 +9,8 @@ set -euo pipefail
 ip netns add lanc 2> /dev/null || true
 ip link show br-lantest > /dev/null 2>&1 || ip link add br-lantest type bridge
 ip link set br-lantest up
-ip link show tap-n100 > /dev/null 2>&1 || ip tuntap add dev tap-n100 mode tap
-ip link set tap-n100 master br-lantest up
+ip link show tap-owrt > /dev/null 2>&1 || ip tuntap add dev tap-owrt mode tap
+ip link set tap-owrt master br-lantest up
 if ! ip link show veth-h > /dev/null 2>&1; then
     ip link add veth-h type veth peer name veth-c
     ip link set veth-c netns lanc
@@ -37,10 +37,10 @@ qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 4 -m 4096 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,file="$VM_WORK/ovmf_vars.fd" \
     -drive file="$VM_WORK/disk.raw",if=none,id=nvm,format=raw \
-    -device nvme,serial=N100TEST,drive=nvm \
+    -device nvme,serial=VMTEST,drive=nvm \
     -netdev user,id=wan,hostfwd=tcp:127.0.0.1:2222-:22,hostfwd=tcp:127.0.0.1:8081-:80 \
     -device e1000e,netdev=wan,mac=52:54:00:00:00:10 \
-    -netdev tap,id=lan1,ifname=tap-n100,script=no,downscript=no \
+    -netdev tap,id=lan1,ifname=tap-owrt,script=no,downscript=no \
     -device e1000e,netdev=lan1,mac=52:54:00:00:00:11 \
     -netdev hubport,id=lan2,hubid=2 -device e1000e,netdev=lan2,mac=52:54:00:00:00:12 \
     -netdev hubport,id=lan3,hubid=3 -device e1000e,netdev=lan3,mac=52:54:00:00:00:13 \

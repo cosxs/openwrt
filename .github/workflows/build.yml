@@ -1,4 +1,4 @@
-name: Build N100 firmware
+name: Build firmware
 
 # A push to main builds the committed recipe. Scheduled and manual runs first
 # move the pins to the latest upstream releases. A run builds only when the
@@ -111,8 +111,8 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         run: |
           dir=${{ steps.build.outputs.dir }}
-          work=/mnt/n100-vm
-          [[ -d /mnt ]] || work=$RUNNER_TEMP/n100-vm
+          work=/mnt/openwrt-vm
+          [[ -d /mnt ]] || work=$RUNNER_TEMP/openwrt-vm
           sudo VM_WORK="$work" tests/vm/run.sh "$dir"/*-squashfs-combined-efi.img.gz "$dir" 2>&1 |
             tee "$dir/vm-test.log"
 
@@ -120,7 +120,7 @@ jobs:
         if: always() && steps.plan.outputs.build == 'true'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: n100-logs-${{ github.run_id }}
+          name: firmware-logs-${{ github.run_id }}
           path: |
             artifacts/**/*.log
             artifacts/**/*.manifest

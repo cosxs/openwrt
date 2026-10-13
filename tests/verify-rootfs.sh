@@ -40,10 +40,10 @@ umask 077
 mkdir -p /tmp/.uci /tmp/sysinfo /proc/sys/net/ipv6 /dev
 # Real preinit populates sysinfo before board detection; model that input.
 [ -s /tmp/sysinfo/board_name ] || printf "generic\n" > /tmp/sysinfo/board_name
-[ -s /tmp/sysinfo/model ] || printf "N100 verification fixture\n" > /tmp/sysinfo/model
+[ -s /tmp/sysinfo/model ] || printf "x86-64 verification fixture\n" > /tmp/sysinfo/model
 # A regular sink suffices for these userspace-only tests if the rootfs has no node.
 [ -e /dev/null ] || : > /dev/null
-verify_tmp=$(mktemp -d /tmp/n100-verify.XXXXXX)
+verify_tmp=$(mktemp -d /tmp/rootfs-verify.XXXXXX)
 trap 'rm -rf "$verify_tmp"' EXIT
 
 fail() {

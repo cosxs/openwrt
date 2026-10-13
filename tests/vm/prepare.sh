@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
-# Build a 16 GiB virtual NVMe disk the way the N100 is installed: write the
-# image, move the GPT backup header to the end, append a data partition with
-# the remaining space and format it as ext4 labelled "data".
+# Build a 16 GiB virtual NVMe disk the way a machine is installed (see the
+# README): write the image, move the GPT backup header to the end, append a
+# data partition with the remaining space and format it as ext4 labelled
+# "data".
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 image=$1
