@@ -496,9 +496,11 @@ STUB
 printf '#!/bin/sh\necho "mkfs.ext4 $*" >> "$CALLS"\n' > "$verify_tmp/stub/mkfs.ext4"
 cat > "$verify_tmp/stub/blkid" <<'STUB'
 #!/bin/sh
-case "$1" in
-    -L) [ -n "$TEST_DATA_LABEL" ] ;;
-    -p) [ -z "$TEST_FS_TYPE" ] || echo "$TEST_FS_TYPE" ;;
+# blkid -L LABEL, or blkid -p -o value -s TAG DEVICE.
+case "$1 $5" in
+    '-L '*) [ -n "$TEST_DATA_LABEL" ] ;;
+    '-p PART_ENTRY_NAME') sed -n 's/^PARTNAME=//p' "/sys/class/block/${6#/dev/}/uevent" ;;
+    '-p TYPE') [ -z "$TEST_FS_TYPE" ] || echo "$TEST_FS_TYPE" ;;
 esac
 STUB
 chmod 755 "$verify_tmp/stub/parted" "$verify_tmp/stub/partx" "$verify_tmp/stub/mkfs.ext4" "$verify_tmp/stub/blkid"

@@ -28,7 +28,9 @@ case "$(cat /sys/block/"$disk"/"$disk"*/partition 2> /dev/null | sort -n | xargs
         ;;
     '1 2 3 128')
         export_partdevice part 3 || exit 0
-        grep -qx PARTNAME=data "/sys/class/block/$part/uevent" &&
+        # Read from the partition table: the kernel learns the name of a
+        # partition added by partx only at the next boot.
+        [ "$(blkid -p -o value -s PART_ENTRY_NAME "/dev/$part")" = data ] &&
             [ -z "$(blkid -p -o value -s TYPE "/dev/$part")" ] && format "$part"
         exit 0
         ;;
