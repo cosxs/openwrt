@@ -40,7 +40,8 @@ docker run --rm --platform linux/amd64 --user root --network none \
         chroot /tmp/inspect-root /usr/bin/docker --version
         chroot /tmp/inspect-root /usr/bin/docker-compose version
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-dockerman.json
-        echo "PASS: actual image contains Docker, Compose and the Docker LuCI page"
+        test -n "$(find /tmp/inspect-root/lib/modules -name nf_conntrack_netlink.ko)"
+        echo "PASS: actual image contains Docker, Compose, conntrack netlink and the Docker LuCI page"
         test -x /tmp/inspect-root/usr/lib/ddns/update_cloudflare_com_v4.sh
         test -f /tmp/inspect-root/usr/share/ddns/default/cloudflare.com-v4.json
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ddns.json

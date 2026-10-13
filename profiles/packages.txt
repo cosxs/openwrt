@@ -21,6 +21,8 @@ docker
 docker-compose
 luci-app-dockerman
 luci-i18n-dockerman-zh-cn
+# Lets dockerd clear the connection tracking entries of removed containers.
+kmod-nf-conntrack-netlink
 ddns-scripts
 ddns-scripts-cloudflare
 luci-app-ddns

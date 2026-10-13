@@ -106,6 +106,7 @@ check 'docker0 device sections' 1 "$(vm "uci show network | grep -c \"\.name='do
 vm 'docker rm -f web > /dev/null 2>&1; docker run -d --name web -p 8088:8080 busybox:stable httpd -f -p 8080 -h /etc > /dev/null 2>&1 && sleep 5'
 check 'LAN to published container port' ok "$(lan sh -c 'curl -sf -m 15 http://192.168.72.1:8088/hostname > /dev/null && echo ok || echo fail')"
 vm 'docker rm -f web > /dev/null 2>&1'
+check 'dockerd conntrack cleanup warnings' 0 "$(vm 'logread | grep -c "Failed to delete conntrack state"')"
 check 'LAN client HTTPS after containers' 200 "$(lan curl -sS -o /dev/null -m 30 -w '%{http_code}' https://www.cloudflare.com/cdn-cgi/trace)"
 
 echo "== 日志中的错误"
