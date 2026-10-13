@@ -20,7 +20,8 @@ stop_vm() {
 }
 finish() {
     stop_vm
-    [ -z "$log_dir" ] || cp "$VM_WORK/serial.log" "$log_dir/vm-serial.log" 2> /dev/null || true
+    # QEMU creates the serial log as 0640; the copy is for the unprivileged user.
+    [ -z "$log_dir" ] || install -m 0644 "$VM_WORK/serial.log" "$log_dir/vm-serial.log" 2> /dev/null || true
 }
 trap finish EXIT
 
