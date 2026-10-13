@@ -44,10 +44,7 @@ check 'nikki enabled' 0 "$(vm 'uci -q get nikki.config.enabled')"
 check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(vm 'pidof sing-box > /dev/null && echo yes || echo no')"
 check 'port 8080 listening' no "$(vm 'netstat -ltn 2> /dev/null | grep -q ":8080 " && echo yes || echo no')"
-check 'tailscaled running' yes "$(vm 'pidof tailscaled > /dev/null && echo yes || echo no')"
-check 'tailscaled cgroup' 0::/services/tailscale/instance1 "$(vm 'cat /proc/$(pidof tailscaled)/cgroup')"
-vm 'tailscale status 2>&1 | head -2'
-vm 'ls /usr/share/luci/menu.d/ | grep -E "nikki|tailscale|dockerman|ddns" | xargs'
+vm 'ls /usr/share/luci/menu.d/ | grep -E "nikki|dockerman|ddns" | xargs'
 
 echo "== 网页管理与初始密码"
 check 'LuCI login page (unauthenticated)' 403 "$(lan curl -s -o /dev/null -m 30 -w '%{http_code}' http://192.168.72.1/cgi-bin/luci/)"

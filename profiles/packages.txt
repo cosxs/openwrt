@@ -15,9 +15,6 @@ kmod-tcp-bbr
 # ImageBuilder rejects name=version here. The pinned local APK is newer than the
 # official feed's sing-box; verify-image.sh fails if another version is chosen.
 sing-box
-tailscale
-luci-app-tailscale-community
-luci-i18n-tailscale-community-zh-cn
 dockerd
 docker
 docker-compose
