@@ -4,6 +4,8 @@ luci
 # the default LuCI theme. luci brings the official Bootstrap too.
 luci-theme-argon
 luci-i18n-base-zh-cn
+luci-i18n-firewall-zh-cn
+luci-i18n-package-manager-zh-cn
 ucode-mod-fs
 nikki
 luci-app-nikki

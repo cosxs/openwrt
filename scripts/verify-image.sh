@@ -49,5 +49,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
             grep -qx "V:$ARGON_VERSION"
         echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
+        for lmo in base firewall package-manager dockerman ddns community nikki; do
+            test -f "/tmp/inspect-root/usr/lib/lua/luci/i18n/$lmo.zh-cn.lmo"
+        done
+        echo "PASS: actual image contains the Chinese translations of every LuCI page"
     ' 2>&1 | tee "$image_dir/verification.log"
 

@@ -16,7 +16,7 @@
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
 | 数据分区 | 卷标 `data` 的分区挂载到 `/mnt/data`，写盘时用目标盘的剩余空间创建（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
 | 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、Nikki 及 Mihomo stable 核心、sing-box、Tailscale（官方源）及其 LuCI 页面、Docker/Compose（官方源）及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
-| Docker | 数据目录 `/mnt/data/docker/`；随系统启动。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。LuCI 容器管理依赖的网页终端 `ttyd` 只监听 LAN 的 7681 端口，需 root 登录 |
+| Docker | 数据目录 `/mnt/data/docker/`；随系统启动。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd` 只监听 LAN 的 7681 端口，需 root 登录 |
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
 | Nikki 初始状态 | 保留上游默认关闭，导入配置后再启用 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1` |
