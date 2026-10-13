@@ -284,7 +284,7 @@ apply_data_mount_default() {
 }
 data_mount_sections() {
     for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=mount$/\1/p'); do
-        [ "$(uci -q get "fstab.$section.target")" = /mnt/data ] && echo "$section"
+        [ "$(uci -q get "fstab.$section.target")" = /data ] && echo "$section"
     done
 }
 rm -f /etc/config/fstab
@@ -292,20 +292,29 @@ rm -f /etc/config/fstab
 [ -f /etc/config/fstab ] || fail 'block-mount did not generate fstab'
 apply_data_mount_default
 data_section=$(data_mount_sections)
-assert_equal 1 "$(echo "$data_section" | grep -c .)" 'number of /mnt/data mounts'
+assert_equal 1 "$(echo "$data_section" | grep -c .)" 'number of /data mounts'
 assert_equal data "$(uci -q get "fstab.$data_section.label")" 'data mount label'
 assert_equal 1 "$(uci -q get "fstab.$data_section.enabled")" 'data mount enabled'
 cp /etc/config/fstab "$verify_tmp/data.fstab"
 apply_data_mount_default
 cmp -s "$verify_tmp/data.fstab" /etc/config/fstab || fail 'repeated data mount default changed fstab'
-# Kept settings: /mnt/data mounted from another partition by UUID.
+# Kept settings: /data mounted from another partition by UUID.
 uci delete "fstab.$data_section.label"
 uci set "fstab.$data_section.uuid=00000000-0000-4000-8000-000000000000"
 uci commit fstab
 cp /etc/config/fstab "$verify_tmp/user.fstab"
 apply_data_mount_default
 cmp -s "$verify_tmp/user.fstab" /etc/config/fstab || fail 'kept data mount was changed'
-echo 'PASS: factory fstab mounts the data label at /mnt/data; kept mount settings are unchanged'
+# Kept settings: the data label mounted elsewhere, as by earlier firmware at
+# /mnt/data; no second mount of the same partition is added.
+uci set "fstab.$data_section.target=/mnt/data"
+uci delete "fstab.$data_section.uuid"
+uci set "fstab.$data_section.label=data"
+uci commit fstab
+cp /etc/config/fstab "$verify_tmp/user.fstab"
+apply_data_mount_default
+cmp -s "$verify_tmp/user.fstab" /etc/config/fstab || fail 'kept data label mount was changed'
+echo 'PASS: factory fstab mounts the data label at /data; kept mount settings are unchanged'
 
 # 9. dockerd data root and WAN blocking rule, with /rom modelled as in step 7.
 apply_dockerd_defaults() {
@@ -317,7 +326,7 @@ cp /etc/config/dockerd /rom/etc/config/dockerd
 assert_equal /opt/docker/ "$(uci -q get dockerd.globals.data_root)" 'shipped Docker data root'
 assert_equal wan "$(uci -q get dockerd.firewall.blocked_interfaces)" 'shipped blocked interfaces'
 apply_dockerd_defaults
-assert_equal /mnt/data/docker/ "$(uci -q get dockerd.globals.data_root)" 'factory Docker data root'
+assert_equal /data/docker/ "$(uci -q get dockerd.globals.data_root)" 'factory Docker data root'
 assert_equal '--match conntrack ! --ctstate RELATED,ESTABLISHED' \
     "$(uci -q get dockerd.firewall.extra_iptables_args)" 'factory WAN blocking rule arguments'
 assert_equal wan "$(uci -q get dockerd.firewall.blocked_interfaces)" 'factory blocked interfaces'
@@ -330,7 +339,7 @@ uci commit dockerd
 cp /etc/config/dockerd "$verify_tmp/user.dockerd"
 apply_dockerd_defaults
 cmp -s "$verify_tmp/user.dockerd" /etc/config/dockerd || fail 'kept dockerd settings were changed'
-echo 'PASS: factory dockerd uses /mnt/data/docker and blocks only new WAN connections; kept dockerd settings are unchanged'
+echo 'PASS: factory dockerd uses /data/docker and blocks only new WAN connections; kept dockerd settings are unchanged'
 
 # 10. Docker zone and forwardings, created before dockerd's own uciadd runs.
 apply_docker_firewall_default() {

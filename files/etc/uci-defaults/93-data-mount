@@ -1,12 +1,13 @@
 #!/bin/sh
 
-# Mount the partition labelled "data" at /mnt/data. A /mnt/data mount restored
-# from kept settings is left unchanged.
+# Mount the partition labelled "data" at /data. An fstab that already mounts
+# that label or something at /data, e.g. from kept settings, is left unchanged.
 for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=mount$/\1/p'); do
-    [ "$(uci -q get "fstab.$section.target")" = /mnt/data ] && exit 0
+    [ "$(uci -q get "fstab.$section.target")" = /data ] && exit 0
+    [ "$(uci -q get "fstab.$section.label")" = data ] && exit 0
 done
 uci add fstab mount > /dev/null
-uci set fstab.@mount[-1].target='/mnt/data'
+uci set fstab.@mount[-1].target='/data'
 uci set fstab.@mount[-1].label='data'
 uci set fstab.@mount[-1].enabled='1'
 uci commit fstab

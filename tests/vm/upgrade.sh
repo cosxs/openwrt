@@ -11,7 +11,7 @@ wait_for_router 300 || exit 1
 echo "== 升级前：修改设置并写入标记"
 vm 'uci set system.@system[0].hostname=kept-host && uci commit system'
 vm 'uci set firewall.@defaults[0].flow_offloading=0 && uci commit firewall'
-vm 'echo kept > /mnt/data/marker'
+vm 'echo kept > /data/marker'
 images_before=$(vm 'docker images --format "{{.Repository}}:{{.Tag}}" | sort | xargs')
 echo "docker images before: $images_before"
 vm 'cat /proc/partitions | grep nvme'
@@ -42,9 +42,9 @@ check 'flow offloading kept off' 0 "$(vm 'uci -q get firewall.@defaults[0].flow_
 check 'WAN admin rule kept' rule "$(vm 'uci -q get firewall.wan_private_admin')"
 check 'SSH from WAN side' ok "$(sshpass -e ssh -n -q -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 root@127.0.0.1 'echo ok' 2> /dev/null)"
 check 'LAN address kept' 192.168.72.1/24 "$(vm 'ip -4 -o addr show br-lan' | awk '{print $4}')"
-check 'data marker' kept "$(vm 'cat /mnt/data/marker')"
+check 'data marker' kept "$(vm 'cat /data/marker')"
 check 'docker images kept' "$images_before" "$(vm 'docker images --format "{{.Repository}}:{{.Tag}}" | sort | xargs')"
-check 'docker root/driver' '/mnt/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
+check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
 check 'pending uci-defaults' '' "$(vm 'ls /etc/uci-defaults' | xargs)"
 check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 vm 'cat /proc/partitions | grep nvme'

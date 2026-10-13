@@ -80,9 +80,9 @@ check 'WAN admin set restored by hotplug' 10.0.2.0/24 "$(wan_set)"
 check 'LuCI from WAN side after hotplug' 403 "$(wan_luci)"
 
 echo "== 数据分区与 Docker"
-vm 'grep " /mnt/data " /proc/mounts; df -h /mnt/data | tail -1'
-check 'data mount fstype' ext4 "$(vm "awk '\$2 == \"/mnt/data\" {print \$3}' /proc/mounts")"
-check 'docker root/driver' '/mnt/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
+vm 'grep " /data " /proc/mounts; df -h /data | tail -1'
+check 'data mount fstype' ext4 "$(vm "awk '\$2 == \"/data\" {print \$3}' /proc/mounts")"
+check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
 vm 'docker version --format "docker server {{.Server.Version}}"; docker compose version'
 vm 'uci show firewall | grep -E "docker" | head -8; uci show network.docker 2>/dev/null | head -4'
 
