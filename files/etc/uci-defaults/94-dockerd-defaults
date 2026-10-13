@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Factory dockerd settings. Only the shipped config is changed, so a config
+# restored from kept settings stays as it is.
+# - Keep container data on the data partition: the system partition is small
+#   and its overlay cannot back Docker's overlay storage.
+# - The default rule blocking WAN to docker0 also rejects replies to the
+#   containers' own connections; block only new connections from WAN.
+cmp -s /etc/config/dockerd /rom/etc/config/dockerd || exit 0
+uci set dockerd.globals.data_root='/mnt/data/docker/'
+uci set dockerd.firewall.extra_iptables_args='--match conntrack ! --ctstate RELATED,ESTABLISHED'
+uci commit dockerd

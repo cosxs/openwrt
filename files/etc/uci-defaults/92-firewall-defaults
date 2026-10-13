@@ -1,0 +1,28 @@
+#!/bin/sh
+
+# Factory firewall defaults, applied only while the firewall config is still the
+# shipped one; a firewall restored from kept settings keeps its own choices.
+# This runs before package scripts add their firewall includes on first boot.
+# - Software flow offloading.
+# - SSH and the web interface from the WAN's own subnet, the upstream home
+#   network. The hotplug script 30-wan-admin-subnet fills the set only while
+#   that subnet is private IPv4, so a public WAN address opens nothing. IPv4
+#   only: the WAN may also hold a public IPv6 address that must stay closed.
+cmp -s /etc/config/firewall /rom/etc/config/firewall || exit 0
+uci set firewall.@defaults[0].flow_offloading='1'
+
+uci set firewall.wan_admin_subnet=ipset
+uci set firewall.wan_admin_subnet.name='wan_admin_subnet'
+uci set firewall.wan_admin_subnet.family='ipv4'
+uci add_list firewall.wan_admin_subnet.match='src_net'
+uci set firewall.wan_admin_subnet.loadfile='/etc/wan-admin-subnet'
+
+uci set firewall.wan_private_admin=rule
+uci set firewall.wan_private_admin.name='Allow-Admin-From-WAN-Subnet'
+uci set firewall.wan_private_admin.src='wan'
+uci set firewall.wan_private_admin.family='ipv4'
+uci set firewall.wan_private_admin.proto='tcp'
+uci set firewall.wan_private_admin.dest_port='22 80'
+uci set firewall.wan_private_admin.ipset='wan_admin_subnet'
+uci set firewall.wan_private_admin.target='ACCEPT'
+uci commit firewall

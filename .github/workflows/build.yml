@@ -1,0 +1,134 @@
+name: Build N100 firmware
+
+# A push to main builds the committed recipe. Scheduled and manual runs first
+# move the pins to the latest upstream releases. A run builds only when the
+# recipe or the resolved package set differs from the latest release (or when
+# forced), and releases only after the image and VM tests pass.
+on:
+  push:
+    branches: [main]
+    paths:
+      - profiles/**
+      - files/**
+      - scripts/**
+      - tests/**
+      - .github/workflows/build.yml
+  schedule:
+    - cron: '37 19 * * *' # 03:37 Asia/Shanghai
+  workflow_dispatch:
+    inputs:
+      force:
+        description: Build and release even if nothing changed since the latest release
+        type: boolean
+        default: false
+
+permissions:
+  contents: write
+  issues: write
+
+concurrency:
+  group: firmware
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 150
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Update pinned upstream versions
+        if: github.event_name != 'push'
+        run: |
+          mkdir -p .build
+          ./scripts/update-pins.sh | tee .build/pin-changes.txt
+          {
+            echo '### Pin update'
+            if [[ -s .build/pin-changes.txt ]]; then
+              sed 's/^/- /' .build/pin-changes.txt
+            else
+              echo 'All pins are at the latest upstream releases.'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Open issues for notices
+        if: github.event_name != 'push'
+        run: |
+          { grep '^notice: ' .build/pin-changes.txt || true; } | sed 's/^notice: //' |
+            while IFS= read -r title; do
+              found=$(gh issue list --state all --search "in:title \"$title\"" --json title \
+                --jq '.[].title' | grep -Fxc -- "$title" || true)
+              [[ $found != 0 ]] || gh issue create --title "$title" \
+                --body "Reported by the pin update in ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}."
+            done
+
+      - name: Decide whether to build
+        id: plan
+        run: |
+          mkdir -p .build
+          ./scripts/build.sh --manifest-only .build/manifest.txt
+          ./scripts/build-state.sh .build/manifest.txt > .build/build-state.txt
+          previous=$(gh release list --limit 1 --exclude-drafts --json tagName --jq '.[0].tagName // empty')
+          build=true
+          if [[ -n $previous && '${{ inputs.force }}' != true ]] &&
+              gh release download "$previous" --pattern build-state.txt --output .build/previous-state.txt &&
+              cmp -s .build/build-state.txt .build/previous-state.txt; then
+            build=false
+            echo "Recipe and packages are unchanged since $previous; nothing to build." >> "$GITHUB_STEP_SUMMARY"
+          fi
+          echo "build=$build" >> "$GITHUB_OUTPUT"
+
+      - name: Free disk space
+        if: steps.plan.outputs.build == 'true'
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Build
+        id: build
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          ./scripts/build.sh
+          dirs=(artifacts/*/*/)
+          dir=${dirs[-1]}
+          echo "dir=${dir%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Verify the image contents
+        if: steps.plan.outputs.build == 'true'
+        run: ./scripts/verify-image.sh "${{ steps.build.outputs.dir }}"/*-squashfs-rootfs.img.gz
+
+      - name: Install VM test tools
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf sshpass busybox
+
+      - name: Test in a VM
+        if: steps.plan.outputs.build == 'true'
+        run: |
+          dir=${{ steps.build.outputs.dir }}
+          work=/mnt/n100-vm
+          [[ -d /mnt ]] || work=$RUNNER_TEMP/n100-vm
+          sudo VM_WORK="$work" tests/vm/run.sh "$dir"/*-squashfs-combined-efi.img.gz "$dir" 2>&1 |
+            tee "$dir/vm-test.log"
+
+      - name: Save logs
+        if: always() && steps.plan.outputs.build == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: n100-logs-${{ github.run_id }}
+          path: |
+            artifacts/**/*.log
+            artifacts/**/*.manifest
+            artifacts/**/*.txt
+            artifacts/**/build.env
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Release
+        if: steps.plan.outputs.build == 'true'
+        run: ./scripts/release.sh "${{ steps.build.outputs.dir }}" .build/pin-changes.txt

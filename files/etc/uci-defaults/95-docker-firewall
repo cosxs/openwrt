@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# fw4 rejects traffic between zones without a forwarding, and dockerd only adds
+# its own zone, so containers could not reach the internet. Create the sections
+# dockerd's "uciadd" would create (it then leaves them alone) together with
+# docker->wan and lan->docker forwardings. An existing docker zone, e.g. from
+# kept settings, is left unchanged.
+uci -q get firewall.docker > /dev/null && exit 0
+
+if ! uci -q get network.docker > /dev/null; then
+    uci set network.docker=interface
+    uci set network.docker.device='docker0'
+    uci set network.docker.proto='none'
+    uci set network.docker.auto='0'
+fi
+if ! uci -q show network | grep -q "^network\.[^.]*\.name='docker0'$"; then
+    uci add network device > /dev/null
+    uci set network.@device[-1].type='bridge'
+    uci set network.@device[-1].name='docker0'
+fi
+uci commit network
+
+uci set firewall.docker=zone
+uci set firewall.docker.name='docker'
+uci set firewall.docker.input='ACCEPT'
+uci set firewall.docker.output='ACCEPT'
+uci set firewall.docker.forward='ACCEPT'
+uci add_list firewall.docker.network='docker'
+for forwarding in 'docker wan' 'lan docker'; do
+    set -- $forwarding
+    uci add firewall forwarding > /dev/null
+    uci set firewall.@forwarding[-1].src="$1"
+    uci set firewall.@forwarding[-1].dest="$2"
+done
+uci commit firewall

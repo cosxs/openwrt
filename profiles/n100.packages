@@ -1,0 +1,33 @@
+# Preserve the official generic profile's default system and hardware packages.
+luci
+# Third-party theme from the pinned local APK; its first-boot script makes it
+# the default LuCI theme. luci brings the official Bootstrap too.
+luci-theme-argon
+luci-i18n-base-zh-cn
+ucode-mod-fs
+nikki
+luci-app-nikki
+luci-i18n-nikki-zh-cn
+mihomo-meta
+kmod-tcp-bbr
+# ImageBuilder rejects name=version here. The pinned local APK is newer than the
+# official feed's sing-box; verify-image.sh fails if another version is chosen.
+sing-box
+tailscale
+luci-app-tailscale-community
+luci-i18n-tailscale-community-zh-cn
+dockerd
+docker
+docker-compose
+luci-app-dockerman
+luci-i18n-dockerman-zh-cn
+ddns-scripts
+ddns-scripts-cloudflare
+luci-app-ddns
+luci-i18n-ddns-zh-cn
+# Mount the data partition and manage disks.
+block-mount
+lsblk
+blkid
+parted
+

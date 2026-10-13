@@ -1,0 +1,35 @@
+#!/bin/sh
+
+# board_detect sets CFG to its temporary board file. Saved UCI settings are
+# handled by config_generate and are not modified here.
+[ -n "${CFG:-}" ] || exit 1
+
+ucode -l fs -e '
+let path = ARGV[0];
+let source = fs.readfile(path);
+if (source == null)
+    die("Cannot read board configuration: " + path + "\n");
+
+let board = json(source);
+if (type(board) != "object")
+    die("Board configuration is not an object\n");
+
+board.network = {
+    lan: { ports: [ "eth1", "eth2", "eth3" ], protocol: "static", ipaddr: "192.168.72.1" },
+    wan: { device: "eth0", protocol: "dhcp" }
+};
+
+// config_generate has no zone name field; uci-defaults completes it for LuCI.
+if (type(board.system) != "object")
+    board.system = {};
+board.system.hostname = "linuxserver";
+board.system.timezone = "CST-8";
+
+let output = sprintf("%J\n", board);
+let temporary = path + ".n100";
+if (fs.writefile(temporary, output) != length(output))
+    die("Cannot write board configuration\n");
+if (!fs.rename(temporary, path))
+    die("Cannot replace board configuration\n");
+' "$CFG"
+
