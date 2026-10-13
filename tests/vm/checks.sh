@@ -45,6 +45,7 @@ echo "== 应用默认状态"
 check 'nikki enabled' 0 "$(vm 'uci -q get nikki.config.enabled')"
 check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(vm 'pidof sing-box > /dev/null && echo yes || echo no')"
+check 'DDNS sections' 'global=ddns' "$(vm "uci show ddns | sed -n 's/^ddns\.\([^.]*=[^.]*\)$/\1/p'" | xargs)"
 check 'port 8080 listening' no "$(vm 'netstat -ltn 2> /dev/null | grep -q ":8080 " && echo yes || echo no')"
 vm 'ls /usr/share/luci/menu.d/ | grep -E "nikki|dockerman|ddns" | xargs'
 

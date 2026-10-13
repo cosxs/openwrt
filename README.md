@@ -20,7 +20,7 @@
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
 | Nikki 初始状态 | 保留上游默认关闭，导入配置后再启用 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1` |
-| DDNS 初始状态 | 未配置。本机在其他路由器后面时 WAN 是内网地址，记录要用“通过网页查询公网 IP”（`ip_source` 设为 `web`），否则会把内网地址写进 DNS。Cloudflare API 令牌只在设备上填写，不进固件和仓库。DDNS 只更新记录，不提供公网 IPv4 |
+| DDNS 初始状态 | 未配置，也没有上游包自带的两条示例服务。本机在其他路由器后面时 WAN 是内网地址，记录要用“通过网页查询公网 IP”（`ip_source` 设为 `web`），否则会把内网地址写进 DNS。Cloudflare API 令牌只在设备上填写，不进固件和仓库。DDNS 只更新记录，不提供公网 IPv4 |
 
 以上 `ethN` 是 Linux 按网卡识别顺序分配的接口名称，与机身上的插口标签不一定对应；使用前应确认各口与系统接口的对应关系。Console 口为串口管理口，不属于 LAN/WAN 网口。
 
@@ -81,6 +81,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/uci-defaults/92-firewall-defaults`：防火墙仍是出厂配置时，开启软件流量分载，并加入地址集合 `wan_admin_subnet`（从 `/etc/wan-admin-subnet` 加载）和引用它的 `wan_private_admin` 规则（仅 IPv4：WAN 口可能同时有公网 IPv6 地址，不能对 IPv6 开放）。
 - `files/etc/hotplug.d/iface/30-wan-admin-subnet`：WAN 连上或地址变化时计算当前网段，只有内网 IPv4 且前缀在 /8–/30 之间才写入 `/etc/wan-admin-subnet`，否则写空；内容变化时执行 `fw4 reload-sets`。直接按“WAN 当前网段”放行并不安全：光猫桥接后用 DHCP/IPoE 拿到公网地址时，当前网段就是运营商的公网网段。
 - `files/etc/wan-admin-subnet`：上述地址文件的出厂版本（空）。放在 `/etc` 而不是 `/var/run`，是为了防火墙在网络启动前加载时文件一定存在。
+- `files/etc/config/ddns`：上游包的配置文件，只保留 `global` 段，去掉 `myddns_ipv4`、`myddns_ipv6` 两条示例服务（服务商 dyndns.org 未安装，账号和域名都是占位文字）。DDNS 服务仍随系统启用，只运行在 LuCI 中启用的条目；它是包声明的 conffile，保留配置升级沿用设备上的版本。
 - `files/etc/config/sing-box`：上游包的配置文件，仅把 `enabled` 改为 `0`；它是包声明的 conffile，保留配置升级沿用设备上的版本。服务启用状态不用 `DISABLED_SERVICES` 控制，因为 sysupgrade 只保留“已禁用”的服务，设备上启用后会在升级时被关回去。
 - `files/etc/sysctl.d/90-tcp-tuning.conf`：路由器本机终结的 TCP 连接的调优，在 BBR 配置之后加载；设备上可用 `/etc/sysctl.conf` 覆盖。
 - `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区，条件见“写盘”。中途中断（已建分区、尚未格式化）时下次启动只补做格式化；已有文件系统的数据分区从不重新格式化。

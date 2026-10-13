@@ -46,7 +46,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test -x /tmp/inspect-root/usr/lib/ddns/update_cloudflare_com_v4.sh
         test -f /tmp/inspect-root/usr/share/ddns/default/cloudflare.com-v4.json
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ddns.json
-        echo "PASS: actual image contains DDNS with the Cloudflare provider and its LuCI page"
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get ddns.global.upd_privateip)" = 0
+        test -z "$(chroot /tmp/inspect-root /sbin/uci -q show ddns | grep "=service$")"
+        echo "PASS: actual image contains DDNS with the Cloudflare provider, its LuCI page and no example services"
         grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
             grep -qx "V:$ARGON_VERSION"
         echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
