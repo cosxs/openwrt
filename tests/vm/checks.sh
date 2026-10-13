@@ -16,6 +16,8 @@ check zonename Asia/Shanghai "$(vm 'uci -q get system.@system[0].zonename')"
 check timezone CST-8 "$(vm 'uci -q get system.@system[0].timezone')"
 check 'date +%Z' CST "$(vm 'date +%Z')"
 check 'pending uci-defaults' '' "$(vm 'ls /etc/uci-defaults' | xargs)"
+check 'model from the DMI board fields' 'Example Boards EB-4L|example-boards-eb-4l' \
+    "$(vm 'ubus call system board | jsonfilter -e @.model -e @.board_name' | paste -sd '|')"
 check 'boot/system partition KiB' '65536 4194304' "$(vm "awk '\$4 == \"nvme0n1p1\" || \$4 == \"nvme0n1p2\" {print \$3}' /proc/partitions" | xargs)"
 check 'boot partition free KiB > 50000' yes "$(vm "df -k /boot | awk 'NR == 2 {print (\$4 > 50000 ? \"yes\" : \"no\")}'")"
 

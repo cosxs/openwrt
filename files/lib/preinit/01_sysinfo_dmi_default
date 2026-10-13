@@ -1,0 +1,34 @@
+# Model name for boards whose firmware fills the DMI system fields with a bare
+# "Default". The x86 hook in 01_sysinfo falls back to the board vendor and name
+# for placeholders such as "Default string", but takes "Default" as a real
+# name, so such a board shows up as "Default Default". Apply the same fallback
+# to "Default", and keep the result of 01_sysinfo when the board fields are
+# placeholders too. Sourced after 01_sysinfo, whose sanitize_name_x86 it uses.
+
+sysinfo_dmi_placeholder() {
+    case "$1" in
+        '' | empty | Default | 'Default string' | 'System manufacturer' | \
+            'System Product Name' | To\ [bB]e\ [fF]illed\ [bB]y\ O.E.M.)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+do_sysinfo_x86_dmi_default() {
+    local dmi=/sys/devices/virtual/dmi/id vendor product
+
+    vendor=$(cat "$dmi/sys_vendor" 2> /dev/null)
+    product=$(cat "$dmi/product_name" 2> /dev/null)
+    [ "$vendor" = Default ] || [ "$product" = Default ] || return 0
+    [ "$vendor" = Default ] && vendor=$(cat "$dmi/board_vendor" 2> /dev/null)
+    [ "$product" = Default ] && product=$(cat "$dmi/board_name" 2> /dev/null)
+    sysinfo_dmi_placeholder "$vendor" && return 0
+    sysinfo_dmi_placeholder "$product" && return 0
+
+    mkdir -p /tmp/sysinfo
+    echo "$vendor $product" > /tmp/sysinfo/model
+    sanitize_name_x86 /tmp/sysinfo/model > /tmp/sysinfo/board_name
+}
+
+boot_hook_add preinit_main do_sysinfo_x86_dmi_default

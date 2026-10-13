@@ -48,7 +48,7 @@
 ./scripts/verify-image.sh artifacts/<版本>/<时间>/*-squashfs-rootfs.img.gz
 ```
 
-检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置，Argon 为固定版本的默认 LuCI 主题且设备上的选择会保留，以及 Nikki 默认关闭、Mihomo 核心存在、BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
+检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置，Argon 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 Nikki 默认关闭、Mihomo 核心存在、BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
 
 `tests/vm/` 在 QEMU 虚拟机里测试完整磁盘镜像（需要 root、`qemu-system-x86`、`ovmf`、`sshpass`、`busybox`，有 KVM 时自动使用）：
 
@@ -74,6 +74,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `profiles/build.env`：官方版本、容器 digest、分区大小，以及 Nikki 归档、sing-box APK 和 Argon 主题 APK 的来源/摘要。
 - `profiles/packages.txt`：在官方 generic 默认包基础上增加的软件。
 - `profiles/nikki-apks.txt`：从固定 Nikki Release 中选入的 APK。
+- `files/lib/preinit/01_sysinfo_dmi_default`：开机早期在上游 x86 的 `01_sysinfo` 之后运行。有些主板 BIOS 把 DMI 的系统厂商或产品型号填成单独的 `Default`，上游脚本不把它当占位词，LuCI 就会显示型号 `Default Default`；这时改用主板厂商和主板型号（与上游对 `Default string` 等占位词的处理相同），主板字段也是占位词时保留上游结果。
 - `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址、主机名和时区。
 - `files/etc/uci-defaults/90-initial-root-password`：初始 root 密码，只保存 SHA-512 crypt 哈希。
 - `files/etc/uci-defaults/91-zonename`：为新生成的时区补上 LuCI 使用的时区名。

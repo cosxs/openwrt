@@ -17,6 +17,7 @@ for verify_file in \
     etc/uci-defaults/92-firewall-defaults etc/sysctl.d/90-tcp-tuning.conf etc/shadow \
     etc/uci-defaults/10-fstab etc/uci-defaults/93-data-mount \
     etc/uci-defaults/96-data-partition lib/upgrade/common.sh \
+    lib/preinit/01_sysinfo lib/preinit/01_sysinfo_dmi_default \
     etc/uci-defaults/94-dockerd-defaults etc/config/dockerd \
     etc/uci-defaults/95-docker-firewall \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
@@ -573,5 +574,43 @@ mkfs.ext4 -q -F -L data /dev/nvme0n1p3" "$(disk_calls)" 'commands on a fresh NVM
 rm -rf /sys/block /sys/class/block
 cp "$verify_tmp/common.sh" /lib/upgrade/common.sh
 echo 'PASS: a freshly written boot disk gets an ext4 data partition over its free space; existing data and other partitions are never touched'
+# 14. Model name from DMI. The sysinfo preinit files are sourced in glob order
+# and their hooks run in that order, as /etc/preinit does, without set -e and
+# against a fake DMI directory.
+cp -a /tmp/sysinfo "$verify_tmp/sysinfo"
+# sysinfo_model SYS_VENDOR PRODUCT_NAME BOARD_VENDOR BOARD_NAME
+sysinfo_model() {
+    rm -rf /sys/devices/virtual/dmi/id /tmp/sysinfo
+    mkdir -p /sys/devices/virtual/dmi/id
+    printf '%s\n' "$1" > /sys/devices/virtual/dmi/id/sys_vendor
+    printf '%s\n' "$2" > /sys/devices/virtual/dmi/id/product_name
+    printf '%s\n' "$3" > /sys/devices/virtual/dmi/id/board_vendor
+    printf '%s\n' "$4" > /sys/devices/virtual/dmi/id/board_name
+    (
+        set +e
+        hooks=''
+        boot_hook_add() { hooks="$hooks $2"; }
+        for file in /lib/preinit/*sysinfo*; do
+            . "$file"
+        done
+        for hook in $hooks; do
+            "$hook"
+        done
+    )
+    echo "$(cat /tmp/sysinfo/model)|$(cat /tmp/sysinfo/board_name)"
+}
+assert_equal 'Example Boards Co.,Ltd. EB-4L|example-boards-co-ltd-eb-4l' \
+    "$(sysinfo_model Default Default 'Example Boards Co.,Ltd.' EB-4L)" 'model with Default system fields'
+assert_equal 'Example PCs EB-4L|example-pcs-eb-4l' \
+    "$(sysinfo_model 'Example PCs' Default 'Example Boards' EB-4L)" 'model with a Default product name'
+assert_equal 'Example PCs Mini 4L|example-pcs-mini-4l' \
+    "$(sysinfo_model 'Example PCs' 'Mini 4L' 'Example Boards' EB-4L)" 'model with real system fields'
+assert_equal 'Example Boards EB-4L|example-boards-eb-4l' \
+    "$(sysinfo_model 'Default string' 'Default string' 'Example Boards' EB-4L)" 'model with placeholders known to 01_sysinfo'
+assert_equal 'Default Default|default-default' \
+    "$(sysinfo_model Default Default 'Default string' 'Default string')" 'model with placeholder board fields'
+rm -rf /sys/devices /tmp/sysinfo
+cp -a "$verify_tmp/sysinfo" /tmp/sysinfo
+echo 'PASS: a bare Default in the DMI system fields falls back to the board vendor and name; other names are kept'
 echo 'PASS: rootfs userspace verification complete (no network activation or hardware boot test)'
 INNER
