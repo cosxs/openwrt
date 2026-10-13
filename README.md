@@ -14,7 +14,7 @@
 | 主机名 / 时区 | `linuxserver` / `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
 | 引导分区 | 64 MiB（官方默认 16 MiB，内核和 GRUB 约占 6.3 MiB）。保留配置升级时，配置备份暂存在这个分区里，放大后可容纳更大的备份 |
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
-| 数据分区 | 卷标 `data` 的分区挂载到 `/data`，写盘时用目标盘的剩余空间创建（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
+| 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
 | 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、Nikki 及 Mihomo stable 核心、sing-box、Docker/Compose（官方源）及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
 | Docker | 数据目录 `/data/docker/`；随系统启动。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd` 只监听 LAN 的 7681 端口，需 root 登录 |
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
@@ -56,7 +56,7 @@
 sudo tests/vm/run.sh artifacts/<版本>/<时间>/*-squashfs-combined-efi.img.gz
 ```
 
-它按“写盘”一节的方式建好 16 GiB 的 NVMe 磁盘（含数据分区），用 UEFI 和 4 个网口启动，从网络命名空间里的 LAN 客户端检查首次启动后的网络、调优、软件默认状态、初始密码登录、默认主题、WAN 侧管理、数据分区、Docker 和容器联网，再用同一镜像做一次保留配置的 sysupgrade，检查设置、数据分区和 Docker 数据都保留。任一检查失败时以非零状态退出。
+它把镜像写入一块 16 GiB 的虚拟 NVMe 盘（数据分区由固件首次启动时自行创建），用 UEFI 和 4 个网口启动，从网络命名空间里的 LAN 客户端检查首次启动后的网络、调优、软件默认状态、初始密码登录、默认主题、WAN 侧管理、数据分区、Docker 和容器联网，再用同一镜像做一次保留配置的 sysupgrade，检查设置、数据分区和 Docker 数据都保留。任一检查失败时以非零状态退出。
 
 ## 自动构建与发布
 
@@ -82,6 +82,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/wan-admin-subnet`：上述地址文件的出厂版本（空）。放在 `/etc` 而不是 `/var/run`，是为了防火墙在网络启动前加载时文件一定存在。
 - `files/etc/config/sing-box`：上游包的配置文件，仅把 `enabled` 改为 `0`；它是包声明的 conffile，保留配置升级沿用设备上的版本。服务启用状态不用 `DISABLED_SERVICES` 控制，因为 sysupgrade 只保留“已禁用”的服务，设备上启用后会在升级时被关回去。
 - `files/etc/sysctl.d/90-tcp-tuning.conf`：路由器本机终结的 TCP 连接的调优，在 BBR 配置之后加载；设备上可用 `/etc/sysctl.conf` 覆盖。
+- `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区，条件见“写盘”。中途中断（已建分区、尚未格式化）时下次启动只补做格式化；已有文件系统的数据分区从不重新格式化。
 - `files/etc/uci-defaults/93-data-mount`：fstab 里还没有挂载卷标 `data` 的分区、也没有挂到 `/data` 的条目时，添加按卷标 `data` 挂载到 `/data` 的条目。
 - `files/etc/uci-defaults/94-dockerd-defaults`：dockerd 配置仍是出厂版本时，把数据目录改到 `/data/docker/`，并让 WAN→docker0 的阻断规则只拦截新连接。OpenWrt 的根目录是 overlayfs，不能承载 Docker 的 overlay 存储，系统分区的可写层也会在每次 sysupgrade 时清空；dockerd 默认的阻断规则不区分连接状态，会把容器自己发起的连接的回包一并拒绝，容器因此无法上网。
 - `files/etc/uci-defaults/95-docker-firewall`：还没有 `docker` 防火墙区域时，按 dockerd 自身 `uciadd` 的命名预先建好 `docker` 接口、`docker0` 网桥和区域，并加上 docker→wan、lan→docker 转发。fw4 不放行没有 forwarding 的跨区流量，只靠 dockerd 建的区域，容器无法上网。
@@ -97,15 +98,16 @@ Nikki 归档校验固定 SHA256，只导入需要的 APK，不导入其原始签
 
 ## 写盘
 
-全新写盘时，在首次从目标盘启动前创建数据分区。以下以 NVMe 盘 `/dev/nvme0n1` 为例，SATA 盘一般是 `/dev/sda`，分区名为 `/dev/sda3`：
+全新安装只需把镜像写入目标盘，数据分区由固件首次启动时自动创建：
 
-1. 写入镜像（会覆盖整块盘）：`gzip -dc <镜像>.img.gz | dd of=/dev/nvme0n1 bs=4M conv=fsync`
-2. 把 GPT 备份头移到盘尾，用剩余空间追加一个分区。
-3. 格式化：`mkfs.ext4 -L data /dev/nvme0n1p3`（分区号以实际为准）。
+- 在其他系统里写盘（会覆盖整块盘）：`gzip -dc <镜像>.img.gz | dd of=/dev/nvme0n1 bs=4M conv=fsync`（SATA 盘一般是 `/dev/sda`）；
+- 或在已安装的 OpenWrt 上不保留配置升级：`sysupgrade -n -v <镜像文件或网址>`。分区布局与盘上不同（例如从其他固件换装）时会整盘写入，相同时只重写引导和系统分区，数据分区保留。
 
-首次从目标盘启动前，拔掉其他装有同版本 OpenWrt 的启动盘（例如测试用的 U 盘）：同一 ImageBuilder 版本构建的镜像磁盘 GUID 和分区 UUID 相同，内核按 `root=PARTUUID=` 查找系统分区，可能挂载到错误的盘。
+首次启动时，`files/etc/uci-defaults/96-data-partition` 检查系统盘：只有固件自带的分区（1、2、128）、剩余空间至少 1 GiB、且任何盘上都没有卷标 `data` 的文件系统时，才把分区表的 GPT 备份头移到盘尾，用剩余空间建一个名为 `data` 的分区并格式化为 ext4（卷标 `data`），原先留在这片空间里的内容会被覆盖。随后按卷标挂载到 `/data`，Docker 使用其中的 `docker/` 目录。盘上已有其他分区时它不做任何改动，此时可手动创建：`parted -s -f /dev/nvme0n1 print`、`parted -s /dev/nvme0n1 mkpart data ext4 4161MiB 100%`、`partx -a /dev/nvme0n1`、`mkfs.ext4 -L data /dev/nvme0n1p3`（分区号以实际为准），然后重启。创建结果记录在内核日志中（`dmesg | grep data-partition`）。
 
-首次启动时会自动按卷标挂载到 `/data`，Docker 随后使用其中的 `docker/` 目录。之后的保留配置升级只重写引导和系统分区，数据分区保持不变。
+首次从目标盘启动或升级前，拔掉其他装有同版本 OpenWrt 的盘（例如测试用的 U 盘）：同一 ImageBuilder 版本构建的镜像磁盘 GUID 和分区 UUID 相同，内核按 `root=PARTUUID=` 查找系统分区，升级脚本也按磁盘 GUID 查找启动盘，可能用错盘。
+
+之后的保留配置升级只重写引导和系统分区，数据分区保持不变。
 
 ## 设备验收
 

@@ -79,6 +79,11 @@ check 'LuCI from WAN side after hotplug' 403 "$(wan_luci)"
 echo "== 数据分区与 Docker"
 vm 'grep " /data " /proc/mounts; df -h /data | tail -1'
 check 'data mount fstype' ext4 "$(vm "awk '\$2 == \"/data\" {print \$3}' /proc/mounts")"
+# The disk was only written with the image; the firmware made the partition.
+check 'data partition made on first boot' 'data data ext4' "$(vm 'lsblk -no PARTLABEL,LABEL,FSTYPE /dev/nvme0n1p3' | xargs)"
+check 'data partition PARTNAME' PARTNAME=data "$(vm 'grep ^PARTNAME= /sys/class/block/nvme0n1p3/uevent')"
+check 'data partition reaches the end of the disk' yes "$(vm 'p=/sys/class/block/nvme0n1p3; [ $(($(cat $p/start) + $(cat $p/size))) -gt $(($(cat /sys/class/block/nvme0n1/size) - 4096)) ] && echo yes || echo no')"
+vm 'dmesg | grep data-partition'
 check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
 vm 'docker version --format "docker server {{.Server.Version}}"; docker compose version'
 vm 'uci show firewall | grep -E "docker" | head -8; uci show network.docker 2>/dev/null | head -4'

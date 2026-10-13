@@ -16,6 +16,7 @@ for verify_file in \
     etc/uci-defaults/90-initial-root-password etc/uci-defaults/91-zonename \
     etc/uci-defaults/92-firewall-defaults etc/sysctl.d/90-tcp-tuning.conf etc/shadow \
     etc/uci-defaults/10-fstab etc/uci-defaults/93-data-mount \
+    etc/uci-defaults/96-data-partition lib/upgrade/common.sh \
     etc/uci-defaults/94-dockerd-defaults etc/config/dockerd \
     etc/uci-defaults/95-docker-firewall \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
@@ -453,5 +454,122 @@ uci commit luci
 apply_theme_scripts
 assert_equal /luci-static/bootstrap "$(uci -q get luci.main.mediaurlbase)" 'kept Bootstrap theme'
 echo 'PASS: Argon is the factory LuCI theme and first fallback with Bootstrap installed; a theme chosen in LuCI is kept'
+# 13. Data partition on a freshly written disk. No disk is touched: a fake
+# sysfs describes the boot disk, common.sh only names its partitions, and
+# parted, partx, mkfs.ext4 and blkid are stubs that record their calls; partx
+# adds the partition that mkpart asked for to the fake sysfs.
+cp /lib/upgrade/common.sh "$verify_tmp/common.sh"
+cat > /lib/upgrade/common.sh <<'STUB'
+export_bootdevice() { :; }
+export_partdevice() {
+    if [ "$2" = 0 ]; then
+        eval "$1=\$TEST_DISK"
+        return 0
+    fi
+    for dir in /sys/block/"$TEST_DISK"/"$TEST_DISK"*; do
+        [ "$(cat "$dir/partition" 2> /dev/null)" = "$2" ] && { eval "$1=\${dir##*/}"; return 0; }
+    done
+    return 1
+}
+STUB
+cat > "$verify_tmp/stub/parted" <<'STUB'
+#!/bin/sh
+echo "parted $*" >> "$CALLS"
+[ "$3" = mkpart ] || exit 0
+[ -z "$TEST_MKPART_FAIL" ] || exit 1
+echo "${6%s}" > "$STATE/mkpart.start"
+STUB
+cat > "$verify_tmp/stub/partx" <<'STUB'
+#!/bin/sh
+echo "partx $*" >> "$CALLS"
+if [ -f "$STATE/mkpart.start" ]; then
+    case "$TEST_DISK" in nvme*) dev=${TEST_DISK}p3 ;; *) dev=${TEST_DISK}3 ;; esac
+    mkdir -p "/sys/block/$TEST_DISK/$dev"
+    echo 3 > "/sys/block/$TEST_DISK/$dev/partition"
+    cp "$STATE/mkpart.start" "/sys/block/$TEST_DISK/$dev/start"
+    printf 'PARTN=3\nPARTNAME=data\n' > "/sys/block/$TEST_DISK/$dev/uevent"
+    ln -s "/sys/block/$TEST_DISK/$dev" "/sys/class/block/$dev"
+fi
+# Like partx, report an error for the partitions in use.
+exit 1
+STUB
+printf '#!/bin/sh\necho "mkfs.ext4 $*" >> "$CALLS"\n' > "$verify_tmp/stub/mkfs.ext4"
+cat > "$verify_tmp/stub/blkid" <<'STUB'
+#!/bin/sh
+case "$1" in
+    -L) [ -n "$TEST_DATA_LABEL" ] ;;
+    -p) [ -z "$TEST_FS_TYPE" ] || echo "$TEST_FS_TYPE" ;;
+esac
+STUB
+chmod 755 "$verify_tmp/stub/parted" "$verify_tmp/stub/partx" "$verify_tmp/stub/mkfs.ext4" "$verify_tmp/stub/blkid"
+# fake_disk DISK SECTORS [NUMBER:START:SIZE:PARTNAME]...
+fake_disk() {
+    fake_name=$1
+    rm -rf /sys/block /sys/class/block
+    mkdir -p "/sys/block/$fake_name" /sys/class/block
+    echo "$2" > "/sys/block/$fake_name/size"
+    shift 2
+    for spec in "$@"; do
+        IFS=: read -r number start size name <<EOF
+$spec
+EOF
+        case "$fake_name" in nvme*) dev=${fake_name}p$number ;; *) dev=$fake_name$number ;; esac
+        mkdir -p "/sys/block/$fake_name/$dev"
+        echo "$number" > "/sys/block/$fake_name/$dev/partition"
+        echo "$start" > "/sys/block/$fake_name/$dev/start"
+        echo "$size" > "/sys/block/$fake_name/$dev/size"
+        printf 'PARTN=%s\nPARTNAME=%s\n' "$number" "$name" > "/sys/block/$fake_name/$dev/uevent"
+        ln -s "/sys/block/$fake_name/$dev" "/sys/class/block/$dev"
+    done
+}
+# data_partition DISK [DATA_LABEL_ELSEWHERE] [FS_TYPE_OF_PARTITION_3] [MKPART_FAILS]
+data_partition() {
+    : > "$verify_tmp/disk.calls"
+    rm -f "$verify_tmp/mkpart.start"
+    (
+        export PATH="$verify_tmp/stub:$PATH" CALLS="$verify_tmp/disk.calls" STATE="$verify_tmp" \
+            TEST_DISK="$1" TEST_DATA_LABEL="${2:-}" TEST_FS_TYPE="${3:-}" TEST_MKPART_FAIL="${4:-}"
+        cd /etc/uci-defaults && . ./96-data-partition
+    )
+}
+disk_calls() {
+    cat "$verify_tmp/disk.calls"
+}
+image_partitions='128:34:478: 1:512:131072: 2:131584:8388608:'
+disk_16g=33554432
+# shellcheck disable=SC2086 # the partition list is split on purpose
+{
+    fake_disk nvme0n1 $disk_16g $image_partitions
+    data_partition nvme0n1 || fail 'data partition on a fresh NVMe disk failed'
+    assert_equal "parted -s -f /dev/nvme0n1 print
+parted -s /dev/nvme0n1 mkpart data ext4 8521728s 100%
+partx -a /dev/nvme0n1
+mkfs.ext4 -q -F -L data /dev/nvme0n1p3" "$(disk_calls)" 'commands on a fresh NVMe disk'
+    fake_disk sda $disk_16g $image_partitions
+    data_partition sda || fail 'data partition on a fresh SATA disk failed'
+    assert_equal 'mkfs.ext4 -q -F -L data /dev/sda3' "$(disk_calls | tail -1)" 'formatted partition on a SATA disk'
+    fake_disk nvme0n1 $disk_16g $image_partitions
+    data_partition nvme0n1 yes
+    assert_equal '' "$(disk_calls)" 'commands with a data filesystem on any disk'
+    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:1000000:mine
+    data_partition nvme0n1
+    assert_equal '' "$(disk_calls)" 'commands with another partition on the boot disk'
+    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:25030656:data
+    data_partition nvme0n1
+    assert_equal 'mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands after an interrupted first boot'
+    data_partition nvme0n1 '' ext4
+    assert_equal '' "$(disk_calls)" 'commands with a filesystem on the data partition'
+    fake_disk nvme0n1 $((8521728 + 34 + 2097151)) $image_partitions
+    data_partition nvme0n1
+    assert_equal '' "$(disk_calls)" 'commands with less than 1 GiB free'
+    fake_disk nvme0n1 $disk_16g $image_partitions
+    if data_partition nvme0n1 '' '' yes; then
+        fail 'data partition succeeded although mkpart failed'
+    fi
+    assert_equal '' "$(disk_calls | grep mkfs || :)" 'formatting after a failed mkpart'
+}
+rm -rf /sys/block /sys/class/block
+cp "$verify_tmp/common.sh" /lib/upgrade/common.sh
+echo 'PASS: a freshly written boot disk gets an ext4 data partition over its free space; existing data and other partitions are never touched'
 echo 'PASS: rootfs userspace verification complete (no network activation or hardware boot test)'
 INNER

@@ -1,0 +1,63 @@
+#!/bin/sh
+
+# Data partition for a freshly written disk. When the boot disk holds only the
+# image's partitions (1, 2 and 128) and at least 1 GiB beyond them, add a
+# partition named "data" over the rest of the disk and format it as ext4
+# labelled "data", overwriting whatever an earlier system left in that space;
+# 93-data-mount mounts the label at /data. A partition named "data" without a
+# filesystem, as an interrupted first boot leaves it, is formatted. Nothing
+# changes while any disk holds a filesystem labelled "data" or the boot disk
+# holds another partition. Runs before fstab and dockerd start.
+
+# The system log starts later in boot; the kernel log keeps these messages.
+log() {
+    echo "data-partition: $*" > /dev/kmsg
+}
+format() {
+    mkfs.ext4 -q -F -L data "/dev/$1" || { log "formatting /dev/$1 failed"; exit 1; }
+    log "formatted /dev/$1 as ext4 labelled data"
+}
+
+blkid -L data > /dev/null 2>&1 && exit 0
+disk=''
+. /lib/upgrade/common.sh
+export_bootdevice && export_partdevice disk 0 || { log 'boot disk not found'; exit 0; }
+
+case "$(cat /sys/block/"$disk"/"$disk"*/partition 2> /dev/null | sort -n | xargs)" in
+    '1 2 128')
+        ;;
+    '1 2 3 128')
+        export_partdevice part 3 || exit 0
+        grep -qx PARTNAME=data "/sys/class/block/$part/uevent" &&
+            [ -z "$(blkid -p -o value -s TYPE "/dev/$part")" ] && format "$part"
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+export_partdevice part 2 || exit 0
+start=$(( ($(cat "/sys/class/block/$part/start") + $(cat "/sys/class/block/$part/size") + 2047) / 2048 * 2048 ))
+# The backup GPT takes the last 33 sectors of the disk.
+if [ $(( $(cat "/sys/block/$disk/size") - 34 - start )) -lt 2097152 ]; then
+    log "less than 1 GiB free on /dev/$disk"
+    exit 0
+fi
+# The first call moves the backup GPT from the end of the image to the end of
+# the disk.
+if ! parted -s -f "/dev/$disk" print > /dev/null ||
+        ! parted -s "/dev/$disk" mkpart data ext4 "${start}s" 100%; then
+    log "creating the data partition on /dev/$disk failed"
+    exit 1
+fi
+# partx reports the partitions in use; only the new one is added.
+partx -a "/dev/$disk" 2> /dev/null || :
+part=''
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    export_partdevice part 3 && break
+    sleep 1
+done
+[ -n "$part" ] || { log "new partition 3 on /dev/$disk did not appear"; exit 1; }
+log "created /dev/$part from sector $start to the end of /dev/$disk"
+format "$part"
