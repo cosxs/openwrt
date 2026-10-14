@@ -144,7 +144,15 @@ vm 'service miniupnpd stop; uci set upnpd.config.enabled=0 && uci -q delete upnp
 check 'miniupnpd running after disabling' no "$(vm 'pidof miniupnpd > /dev/null && echo yes || echo no')"
 
 echo "== 容器联网与 Compose"
-vm 'docker pull -q alpine:3 2>&1 | tail -1'
+# The factory upstreams are resolvers in mainland China. From a test host
+# abroad the queries cross the border and can get forged answers for blocked
+# names such as Docker Hub, so the pulls use QEMU's resolver. The factory
+# upstreams come back afterwards for the upgrade test.
+dns_upstreams() {
+    vm "uci -q delete dhcp.@dnsmasq[0].server; for s in $*; do uci add_list dhcp.@dnsmasq[0].server=\$s; done; uci commit dhcp; service dnsmasq restart; sleep 2"
+}
+dns_upstreams 10.0.2.3
+vm 'docker pull -q alpine:3 2>&1 | tail -1; docker pull -q busybox:stable 2>&1 | tail -1'
 check 'container HTTPS' ok "$(vm 'docker run --rm alpine:3 sh -c "wget -q -T 20 -O /dev/null https://www.cloudflare.com/cdn-cgi/trace && echo ok || echo fail"' 2>&1 | tail -1)"
 check 'compose up' compose-ok "$(vm 'mkdir -p /tmp/ct && cd /tmp/ct && printf "services:\n  t:\n    image: alpine:3\n    command: [\"echo\", \"compose-ok\"]\n" > compose.yaml && docker compose up 2>&1 | grep -o compose-ok | head -1; docker compose down > /dev/null 2>&1')"
 check 'forwardings' 'docker>wan lan>docker lan>wan' "$(vm 'for s in $(uci show firewall | sed -n "s/^firewall\.\([^.=]*\)=forwarding$/\1/p"); do echo "$(uci get firewall.$s.src)>$(uci get firewall.$s.dest)"; done | sort | xargs')"
@@ -156,6 +164,8 @@ check 'LAN to published container port' ok "$(lan sh -c 'curl -sf -m 15 http://1
 vm 'docker rm -f web > /dev/null 2>&1'
 check 'dockerd conntrack cleanup warnings' 0 "$(vm 'logread | grep -c "Failed to delete conntrack state"')"
 check 'LAN client HTTPS after containers' 200 "$(lan curl -sS -o /dev/null -m 30 -w '%{http_code}' https://www.cloudflare.com/cdn-cgi/trace)"
+dns_upstreams 223.5.5.5 119.29.29.29
+check 'dnsmasq upstream servers restored' '223.5.5.5 119.29.29.29' "$(vm 'uci -q get dhcp.@dnsmasq[0].server')"
 
 echo "== 日志中的错误"
 vm 'logread | grep -iE "error|fail|segfault|oops" | tail -25'
