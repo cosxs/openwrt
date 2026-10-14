@@ -1,0 +1,2 @@
+config ttyd
+	option command '/bin/login'

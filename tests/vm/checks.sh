@@ -64,6 +64,7 @@ check 'overview page uses Argon' yes "$(lan sh -c 'c=$(mktemp); curl -s -m 60 -c
 
 echo "== WAN 侧管理（WAN 网段 10.0.2.0/24，来源 10.0.2.2，经 QEMU 端口转发）"
 wan_luci() { curl -s -o /dev/null -m 20 -w '%{http_code}' http://127.0.0.1:8081/cgi-bin/luci/; }
+wan_ttyd() { curl -s -o /dev/null -m 20 -w '%{http_code}' http://127.0.0.1:8083/; }
 wan_set() { vm 'nft list set inet fw4 wan_admin_subnet | grep -oE "[0-9.]+/[0-9]+" | xargs'; }
 vm 'nft list chain inet fw4 input_wan | grep Allow-Admin | sed "s/^[[:space:]]*//"'
 check 'WAN admin rule nft lines' 1 "$(vm 'nft list chain inet fw4 input_wan | grep -c Allow-Admin')"
@@ -71,14 +72,19 @@ check 'WAN admin rule has no IPv6 part' 0 "$(vm 'nft list chain inet fw4 input_w
 check 'WAN admin set after boot' 10.0.2.0/24 "$(wan_set)"
 check 'SSH from WAN side' ok "$(sshpass -e ssh -n -q -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 root@127.0.0.1 'echo ok' 2> /dev/null)"
 check 'LuCI from WAN side' 403 "$(wan_luci)"
+check 'ttyd listens on all addresses' '0.0.0.0:7681' "$(vm "netstat -ltn | awk '\$4 ~ /:7681\$/ {print \$4}'")"
+check 'ttyd from the LAN' 200 "$(lan curl -s -o /dev/null -m 30 -w '%{http_code}' http://192.168.72.1:7681/)"
+check 'ttyd from WAN side' 200 "$(wan_ttyd)"
 # Empty the set as a public WAN address would, then let the real hotplug
 # script restore it through the system hotplug path.
 vm 'printf "#\n" > /etc/wan-admin-subnet && fw4 -q reload-sets'
 check 'WAN admin set emptied' '' "$(wan_set)"
 check 'LuCI from WAN side with empty set' 000 "$(wan_luci)"
+check 'ttyd from WAN side with empty set' 000 "$(wan_ttyd)"
 vm 'ACTION=ifupdate INTERFACE=wan /sbin/hotplug-call iface'
 check 'WAN admin set restored by hotplug' 10.0.2.0/24 "$(wan_set)"
 check 'LuCI from WAN side after hotplug' 403 "$(wan_luci)"
+check 'ttyd from WAN side after hotplug' 200 "$(wan_ttyd)"
 
 echo "== 数据分区与 Docker"
 vm 'grep " /data " /proc/mounts; df -h /data | tail -1'

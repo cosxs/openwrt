@@ -48,7 +48,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         echo "PASS: actual image contains the swap tools, the swap mount default and the dnsmasq upstream default"
         test -x /tmp/inspect-root/usr/bin/ttyd
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ttyd.json
-        echo "PASS: actual image contains ttyd and its LuCI page"
+        test -z "$(chroot /tmp/inspect-root /sbin/uci -q get ttyd.@ttyd[0].interface)"
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get ttyd.@ttyd[0].command)" = /bin/login
+        echo "PASS: actual image contains ttyd and its LuCI page, and ttyd is not bound to one interface"
         test -x /tmp/inspect-root/usr/lib/ddns/update_cloudflare_com_v4.sh
         test -f /tmp/inspect-root/usr/share/ddns/default/cloudflare.com-v4.json
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ddns.json

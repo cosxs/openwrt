@@ -9,7 +9,7 @@
 | LAN | 首次启动时识别到的 `eth0` 以外所有 `ethN`，按编号顺序加入 `br-lan`。只有一个网口时不建 LAN：`eth0` 仍作为 WAN 从上游取得地址，在上游内网里可通过 WAN 侧管理访问，不会在已有网络上多出一个 DHCP 服务器 |
 | 管理地址 | `192.168.72.1/24`，DHCP 沿用官方默认值 |
 | 网络加速 | BBR（`kmod-tcp-bbr`）；本机 TCP 缓冲区等调优；软件流量分载出厂开启，保留配置升级沿用设备上的设置 |
-| WAN 侧管理 | 出厂允许来自 WAN 口当前所在网段的 SSH（22）和网页管理（80），且只在该网段属于内网 IPv4 时生效：在任意品牌的家用路由器后面时只放行上游局域网；WAN 拿到公网地址、PPPoE 点对点地址或断开时不放行任何来源。IPv6 仍全部拒绝。保留配置升级沿用设备上的防火墙设置 |
+| WAN 侧管理 | 出厂允许来自 WAN 口当前所在网段的 SSH（22）、网页管理（80）和网页终端（7681），且只在该网段属于内网 IPv4 时生效：在任意品牌的家用路由器后面时只放行上游局域网；WAN 拿到公网地址、PPPoE 点对点地址或断开时不放行任何来源。IPv6 仍全部拒绝。保留配置升级沿用设备上的防火墙设置 |
 | 初始密码 | `root` / `159357`，仅在 root 无密码时于首次启动设置；保留配置升级沿用设备上的密码。仓库和固件都是公开的，加上 WAN 侧管理默认对上游内网开放，首次登录后应立即修改 |
 | 主机名 / 时区 | `linuxserver` / `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
 | DNS 上游 | dnsmasq 出厂只向 `223.5.5.5` 和 `119.29.29.29` 转发（`noresolv`），不使用 WAN 下发的 DNS。WAN 下发的 DNS 里可能有上游路由器的 IPv6 链路本地地址，路由器上的防火墙或隧道把 DNS 查询重定向到本机解析器时，这种地址的查询可能拦截不到。DHCP 仍把本机作为 LAN 的 DNS。保留配置升级沿用设备上的设置；在 LuCI“网络 → DHCP/DNS”中可改回 WAN 下发的 DNS（取消“忽略解析文件”并删去 DNS 转发） |
@@ -18,7 +18,7 @@
 | 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；剩余空间不少于 2 GiB 时，数据分区让出盘尾的 1 GiB 给下面的 swap 分区；sysupgrade 和恢复出厂都不改动它 |
 | Swap 分区 | 盘尾 1 GiB 的分区（分区名和卷标都是 `swap`），全新写盘后首次启动时与数据分区一起建好；`fstab` 里有一条按卷标 `swap` 启用的 swap 段，开机由系统自带的 `block mount` 启用。剩余空间不足 2 GiB 时不建，只有数据分区。已经建好数据分区的盘（保留配置升级、或旧版固件装的盘）不会补建 swap 分区，需要时见“写盘”手动创建。不需要 swap 时，在 LuCI“系统 → 挂载点”里停用它，或删去 fstab 的 swap 段；sysupgrade 和恢复出厂不改动这个分区 |
 | 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面、UPnP IGD 和 NAT-PMP 端口映射（官方 `miniupnpd-nftables`）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
-| Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）只监听 LAN 的 7681 端口，需 root 登录 |
+| Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）监听所有地址的 7681 端口，需 root 登录；WAN 侧只对上游内网放行（见“WAN 侧管理”） |
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1`。审核过的配置模板、部署步骤和各字段说明见 [`docs/sing-box/`](docs/sing-box/README.md) |
 | DDNS 初始状态 | 未配置，也没有上游包自带的两条示例服务。本机在其他路由器后面时 WAN 是内网地址，记录要用“通过网页查询公网 IP”（`ip_source` 设为 `web`），否则会把内网地址写进 DNS。Cloudflare API 令牌只在设备上填写，不进固件和仓库。DDNS 只更新记录，不提供公网 IPv4 |
@@ -84,6 +84,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/wan-admin-subnet`：上述地址文件的出厂版本（空）。放在 `/etc` 而不是 `/var/run`，是为了防火墙在网络启动前加载时文件一定存在。
 - `files/etc/config/ddns`：上游包的配置文件，只保留 `global` 段，去掉 `myddns_ipv4`、`myddns_ipv6` 两条示例服务（服务商 dyndns.org 未安装，账号和域名都是占位文字）。DDNS 服务仍随系统启用，只运行在 LuCI 中启用的条目；它是包声明的 conffile，保留配置升级沿用设备上的版本。
 - `files/etc/config/sing-box`：上游包的配置文件，仅把 `enabled` 改为 `0`；它是包声明的 conffile，保留配置升级沿用设备上的版本。服务启用状态不用 `DISABLED_SERVICES` 控制，因为 sysupgrade 只保留“已禁用”的服务，设备上启用后会在升级时被关回去。
+- `files/etc/config/ttyd`：上游包的配置文件，仅去掉 `interface '@lan'`，让 ttyd 监听所有地址（上游默认只绑定 LAN 网桥，从 WAN 侧打开 LuCI 时终端页面的 7681 端口会被拒绝）；WAN 侧是否可达由防火墙决定，见“WAN 侧管理”。它是包声明的 conffile，保留配置升级沿用设备上的版本。
 - `files/etc/sysctl.d/90-tcp-tuning.conf`：路由器本机终结的 TCP 连接的调优，在 BBR 配置之后加载；设备上可用 `/etc/sysctl.conf` 覆盖。
 - `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区和盘尾的 swap 分区，条件见“写盘”。分区建好后先把 swap 分区做成交换空间、最后才格式化数据分区：卷标 `data` 一出现，之后每次开机都直接跳过，所以中断的首次启动（已建分区、尚未格式化）下次启动会补做两者的格式化；已有文件系统的数据分区从不重新格式化。
 - `files/etc/uci-defaults/93-data-mount`：fstab 里还没有挂载卷标 `data` 的分区、也没有挂到 `/data` 的条目时，添加按卷标 `data` 挂载到 `/data` 的条目。

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the firmware under QEMU with UEFI, an NVMe disk and four Intel e1000e
-# NICs: eth0 = WAN via user-mode NAT (SSH and HTTP forwarded to 127.0.0.1:2222
-# and 127.0.0.1:8081), eth1 = LAN bridged to a client in network namespace
+# NICs: eth0 = WAN via user-mode NAT (SSH, HTTP and the ttyd terminal forwarded
+# to 127.0.0.1:2222, 127.0.0.1:8081 and 127.0.0.1:8083), eth1 = LAN bridged to a client in network namespace
 # "lanc", eth2/eth3 = idle LAN ports. The DMI system vendor and product are the
 # placeholder "Default", the board fields carry a real name. Uses KVM when the
 # host offers it.
@@ -42,7 +42,7 @@ qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 4 -m 4096 \
     -device nvme,serial=VMTEST,drive=nvm \
     -smbios type=1,manufacturer=Default,product=Default \
     -smbios 'type=2,manufacturer=Example Boards,product=EB-4L' \
-    -netdev user,id=wan,hostfwd=tcp:127.0.0.1:2222-:22,hostfwd=tcp:127.0.0.1:8081-:80,hostfwd=tcp:127.0.0.1:8082-:30080 \
+    -netdev user,id=wan,hostfwd=tcp:127.0.0.1:2222-:22,hostfwd=tcp:127.0.0.1:8081-:80,hostfwd=tcp:127.0.0.1:8083-:7681,hostfwd=tcp:127.0.0.1:8082-:30080 \
     -device e1000e,netdev=wan,mac=52:54:00:00:00:10 \
     -netdev tap,id=lan1,ifname=tap-owrt,script=no,downscript=no \
     -device e1000e,netdev=lan1,mac=52:54:00:00:00:11 \

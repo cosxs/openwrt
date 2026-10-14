@@ -260,7 +260,7 @@ assert_equal 'ipset|wan_admin_subnet|ipv4|src_net|/etc/wan-admin-subnet|' \
     "$(uci_values firewall.wan_admin_subnet firewall.wan_admin_subnet.name \
         firewall.wan_admin_subnet.family firewall.wan_admin_subnet.match \
         firewall.wan_admin_subnet.loadfile)" 'factory WAN admin set'
-assert_equal 'rule|wan|ipv4|tcp|22 80|wan_admin_subnet|ACCEPT|' \
+assert_equal 'rule|wan|ipv4|tcp|22 80 7681|wan_admin_subnet|ACCEPT|' \
     "$(uci_values firewall.wan_private_admin firewall.wan_private_admin.src \
         firewall.wan_private_admin.family firewall.wan_private_admin.proto \
         firewall.wan_private_admin.dest_port firewall.wan_private_admin.ipset \
