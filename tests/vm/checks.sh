@@ -30,8 +30,8 @@ vm 'ip -4 -o addr show eth0 | cut -d" " -f2,7; ip route show default'
 
 echo "== 加速与调优"
 check congestion bbr "$(vm 'sysctl -n net.ipv4.tcp_congestion_control')"
-check rmem_max 23298048 "$(vm 'sysctl -n net.core.rmem_max')"
-check tcp_rmem '4096 131072 23298048' "$(vm 'sysctl -n net.ipv4.tcp_rmem' | xargs)"
+check rmem_max 33554432 "$(vm 'sysctl -n net.core.rmem_max')"
+check tcp_rmem '4096 131072 33554432' "$(vm 'sysctl -n net.ipv4.tcp_rmem' | xargs)"
 check tcp_wmem '4096 16384 23298048' "$(vm 'sysctl -n net.ipv4.tcp_wmem' | xargs)"
 check tcp_slow_start_after_idle 0 "$(vm 'sysctl -n net.ipv4.tcp_slow_start_after_idle')"
 check tcp_mtu_probing 1 "$(vm 'sysctl -n net.ipv4.tcp_mtu_probing')"
