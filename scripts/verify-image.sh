@@ -55,10 +55,17 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test "$(chroot /tmp/inspect-root /sbin/uci -q get ddns.global.upd_privateip)" = 0
         test -z "$(chroot /tmp/inspect-root /sbin/uci -q show ddns | grep "=service$")"
         echo "PASS: actual image contains DDNS with the Cloudflare provider, its LuCI page and no example services"
+        test -x /tmp/inspect-root/usr/sbin/miniupnpd
+        for nft in table-post chain-post/dstnat chain-post/forward chain-post/srcnat; do
+            test -f "/tmp/inspect-root/usr/share/nftables.d/$nft/20-miniupnpd.nft"
+        done
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get upnpd.config.enabled)" = 0
+        test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-upnp.json
+        echo "PASS: actual image contains disabled miniupnpd for nftables and its LuCI page"
         grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
             grep -qx "V:$ARGON_VERSION"
         echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
-        for lmo in base firewall package-manager dockerman ttyd ddns; do
+        for lmo in base firewall package-manager dockerman ttyd ddns upnp; do
             test -f "/tmp/inspect-root/usr/lib/lua/luci/i18n/$lmo.zh-cn.lmo"
         done
         echo "PASS: actual image contains the Chinese translations of every LuCI page"

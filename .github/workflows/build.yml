@@ -95,7 +95,7 @@ jobs:
         if: steps.plan.outputs.build == 'true'
         run: |
           sudo apt-get update -q
-          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf sshpass busybox
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf sshpass busybox miniupnpc
 
       - name: Test in a VM
         if: steps.plan.outputs.build == 'true'

@@ -46,7 +46,9 @@ check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(vm 'pidof sing-box > /dev/null && echo yes || echo no')"
 check 'DDNS sections' 'global=ddns' "$(vm "uci show ddns | sed -n 's/^ddns\.\([^.]*=[^.]*\)$/\1/p'" | xargs)"
 check 'port 8080 listening' no "$(vm 'netstat -ltn 2> /dev/null | grep -q ":8080 " && echo yes || echo no')"
-vm 'ls /usr/share/luci/menu.d/ | grep -E "dockerman|ddns" | xargs'
+check 'UPnP enabled' 0 "$(vm 'uci -q get upnpd.config.enabled')"
+check 'miniupnpd running' no "$(vm 'pidof miniupnpd > /dev/null && echo yes || echo no')"
+vm 'ls /usr/share/luci/menu.d/ | grep -E "dockerman|ddns|upnp" | xargs'
 
 echo "== 网页管理与初始密码"
 check 'LuCI login page (unauthenticated)' 403 "$(lan curl -s -o /dev/null -m 30 -w '%{http_code}' http://192.168.72.1/cgi-bin/luci/)"
@@ -115,6 +117,31 @@ lan curl -sS -o /dev/null -m 120 -w 'LAN client download: %{size_download} bytes
     https://speed.cloudflare.com/__down?bytes=20000000
 vm 'echo "offloaded conntrack entries: $(grep -c OFFLOAD /proc/net/nf_conntrack 2>/dev/null)"'
 vm 'iptables -S FORWARD 2>&1 | head -3; nft list tables | xargs'
+
+echo "== UPnP 端口映射"
+# The WAN holds a private address here, as behind another router: miniupnpd
+# refuses port forwarding until a public address is declared or found by STUN.
+upnp_url=http://192.168.72.1:5000/rootDesc.xml
+upnp_rules() { vm 'nft list ruleset | grep -c "dport 30080"'; }
+client_ip=$(lan ip -4 -o addr show veth-c | awk '{print $4}' | cut -d/ -f1)
+vm 'uci set upnpd.config.enabled=1 && uci commit upnpd && service miniupnpd restart && sleep 3'
+check 'miniupnpd running when enabled' yes "$(vm 'pidof miniupnpd > /dev/null && echo yes || echo no')"
+check 'UPnP refuses port forwarding on a private WAN' yes "$(vm 'logread -e miniupnpd | grep -q "Port forwarding is impossible" && echo yes || echo no')"
+check 'UPnP mapping refused on a private WAN' 0 "$(lan upnpc -u "$upnp_url" -e vm-test -a "$client_ip" 30080 30080 TCP > /dev/null 2>&1; upnp_rules)"
+vm 'uci set upnpd.config.external_ip=1.2.3.4 && uci commit upnpd && service miniupnpd restart && sleep 3'
+lan timeout 30 busybox nc -l -p 30080 > "$VM_WORK/upnp.out" 2> /dev/null &
+upnp_listener=$!
+sleep 1
+check 'UPnP mapping with a declared public address' ok "$(lan upnpc -u "$upnp_url" -e vm-test -a "$client_ip" 30080 30080 TCP 2>&1 | grep -q 'is redirected to internal' && echo ok || echo fail)"
+vm 'nft list ruleset | grep "dport 30080" | sed "s/^[[:space:]]*//"'
+# QEMU forwards host port 8082 to WAN port 30080, as an internet client would.
+echo upnp-ok | busybox nc -w 5 127.0.0.1 8082 > /dev/null 2>&1
+wait "$upnp_listener"
+check 'connection from WAN through the UPnP mapping' upnp-ok "$(tr -d '\r' < "$VM_WORK/upnp.out")"
+lan upnpc -u "$upnp_url" -d 30080 TCP > /dev/null 2>&1
+check 'UPnP mapping removed' 0 "$(upnp_rules)"
+vm 'service miniupnpd stop; uci set upnpd.config.enabled=0 && uci -q delete upnpd.config.external_ip; uci commit upnpd'
+check 'miniupnpd running after disabling' no "$(vm 'pidof miniupnpd > /dev/null && echo yes || echo no')"
 
 echo "== 容器联网与 Compose"
 vm 'docker pull -q alpine:3 2>&1 | tail -1'

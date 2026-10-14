@@ -25,6 +25,10 @@ ddns-scripts
 ddns-scripts-cloudflare
 luci-app-ddns
 luci-i18n-ddns-zh-cn
+# UPnP IGD and NAT-PMP port mapping; upstream ships it disabled.
+miniupnpd-nftables
+luci-app-upnp
+luci-i18n-upnp-zh-cn
 # Mount the data partition and manage disks.
 block-mount
 lsblk
