@@ -12,6 +12,7 @@
 | WAN 侧管理 | 出厂允许来自 WAN 口当前所在网段的 SSH（22）和网页管理（80），且只在该网段属于内网 IPv4 时生效：在任意品牌的家用路由器后面时只放行上游局域网；WAN 拿到公网地址、PPPoE 点对点地址或断开时不放行任何来源。IPv6 仍全部拒绝。保留配置升级沿用设备上的防火墙设置 |
 | 初始密码 | `root` / `159357`，仅在 root 无密码时于首次启动设置；保留配置升级沿用设备上的密码。仓库和固件都是公开的，加上 WAN 侧管理默认对上游内网开放，首次登录后应立即修改 |
 | 主机名 / 时区 | `linuxserver` / `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
+| DNS 上游 | dnsmasq 出厂只向 `223.5.5.5` 和 `119.29.29.29` 转发（`noresolv`），不使用 WAN 下发的 DNS。WAN 下发的 DNS 里可能有上游路由器的 IPv6 链路本地地址，路由器上的防火墙或隧道把 DNS 查询重定向到本机解析器时，这种地址的查询可能拦截不到。DHCP 仍把本机作为 LAN 的 DNS。保留配置升级沿用设备上的设置；在 LuCI“网络 → DHCP/DNS”中可改回 WAN 下发的 DNS（取消“忽略解析文件”并删去 DNS 转发） |
 | 引导分区 | 64 MiB（官方默认 16 MiB，内核和 GRUB 约占 6.3 MiB）。保留配置升级时，配置备份暂存在这个分区里，放大后可容纳更大的备份 |
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
 | 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
@@ -89,6 +90,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/uci-defaults/94-dockerd-defaults`：dockerd 配置仍是出厂版本时，把数据目录改到 `/data/docker/`，并让 WAN→docker0 的阻断规则只拦截新连接。OpenWrt 的根目录是 overlayfs，不能承载 Docker 的 overlay 存储，系统分区的可写层也会在每次 sysupgrade 时清空；dockerd 默认的阻断规则不区分连接状态，会把容器自己发起的连接的回包一并拒绝，容器因此无法上网。
 - `files/etc/init.d/dockerd-root-shared`：开机第 12 位运行（`fstab` 挂载之后、`dockerd` 之前），把 dockerd 数据目录所在的挂载点设为 shared 传播。dockerd 要求这个挂载点是 shared，OpenWrt 上的挂载都是 private，dockerd 就会把数据目录原地再挂一次并设为 shared；先设好就不会多出这个挂载，与其他用 systemd 的系统一致。数据目录还不存在时按最近的上级目录查找；数据目录在根文件系统上时不改动根文件系统。
 - `files/etc/uci-defaults/95-docker-firewall`：还没有 `docker` 防火墙区域时，按 dockerd 自身 `uciadd` 的命名预先建好 `docker` 接口、`docker0` 网桥和区域，并加上 docker→wan、lan→docker 转发。fw4 不放行没有 forwarding 的跨区流量，只靠 dockerd 建的区域，容器无法上网。
+- `files/etc/uci-defaults/97-dnsmasq-upstream`：dnsmasq 配置里既没有 `server` 列表也没有 `noresolv` 设置时，改为只向 `223.5.5.5`、`119.29.29.29` 转发并忽略 WAN 下发的 DNS，原因见上表。设备上已有任一设置（例如保留配置升级带来的）时不改动。
 - `scripts/build.sh`、`scripts/imagebuilder.sh`：本地和 CI 共用的构建入口。
 - `scripts/verify-image.sh`、`tests/verify-rootfs.sh`：镜像内容检查；`tests/vm/`：虚拟机测试。
 - `scripts/update-pins.sh`、`scripts/build-state.sh`、`scripts/release.sh`：自动构建与发布用的固定版本更新、构建状态和发布脚本。

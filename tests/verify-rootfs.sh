@@ -20,6 +20,7 @@ for verify_file in \
     lib/preinit/01_sysinfo lib/preinit/01_sysinfo_dmi_default \
     etc/uci-defaults/94-dockerd-defaults etc/config/dockerd etc/init.d/dockerd-root-shared \
     etc/uci-defaults/95-docker-firewall \
+    etc/uci-defaults/97-dnsmasq-upstream \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
     lib/functions/network.sh bin/ipcalc.sh \
     etc/uci-defaults/30_luci-theme-argon etc/uci-defaults/30_luci-theme-bootstrap \
@@ -653,5 +654,35 @@ assert_equal '' "$(root_shared docker /mnt/verify-data)" 'commands with a relati
 rm -rf /mnt/verify-data /mnt/verify-root
 cp "$verify_tmp/shared.dockerd" /etc/config/dockerd
 echo 'PASS: the mount holding the Docker data root is made shared before dockerd starts; the root file system is left alone'
+# 16. Factory dnsmasq upstream. The shipped dhcp config is put back first, as
+# config_generate changed the working one in the steps before.
+apply_dnsmasq_upstream() {
+    (cd /etc/uci-defaults && . ./97-dnsmasq-upstream) || fail 'dnsmasq upstream default failed'
+}
+cp "$verify_tmp/dhcp" /etc/config/dhcp
+assert_equal '' "$(uci -q get dhcp.@dnsmasq[0].server)" 'shipped dnsmasq servers'
+assert_equal '' "$(uci -q get dhcp.@dnsmasq[0].noresolv)" 'shipped noresolv'
+apply_dnsmasq_upstream
+assert_equal 1 "$(uci -q get dhcp.@dnsmasq[0].noresolv)" 'factory noresolv'
+assert_equal '223.5.5.5 119.29.29.29' "$(uci -q get dhcp.@dnsmasq[0].server)" 'factory dnsmasq servers'
+cp /etc/config/dhcp "$verify_tmp/data.dhcp"
+apply_dnsmasq_upstream
+cmp -s "$verify_tmp/data.dhcp" /etc/config/dhcp || fail 'repeated dnsmasq upstream default changed dhcp'
+# Kept settings: a server list of its own.
+cp "$verify_tmp/dhcp" /etc/config/dhcp
+uci add_list dhcp.@dnsmasq[0].server='192.0.2.53'
+uci commit dhcp
+cp /etc/config/dhcp "$verify_tmp/user.dhcp"
+apply_dnsmasq_upstream
+cmp -s "$verify_tmp/user.dhcp" /etc/config/dhcp || fail 'kept dnsmasq server list was changed'
+# Kept settings: the WAN's servers chosen on purpose with noresolv 0.
+cp "$verify_tmp/dhcp" /etc/config/dhcp
+uci set dhcp.@dnsmasq[0].noresolv='0'
+uci commit dhcp
+cp /etc/config/dhcp "$verify_tmp/user.dhcp"
+apply_dnsmasq_upstream
+cmp -s "$verify_tmp/user.dhcp" /etc/config/dhcp || fail 'kept noresolv setting was changed'
+cp "$verify_tmp/dhcp" /etc/config/dhcp
+echo 'PASS: factory dnsmasq forwards to 223.5.5.5 and 119.29.29.29 and ignores the WAN servers; kept dnsmasq settings are unchanged'
 echo 'PASS: rootfs userspace verification complete (no network activation or hardware boot test)'
 INNER

@@ -93,6 +93,12 @@ check 'separate mount for the Docker data root' 0 "$(vm 'grep -c " /data/docker 
 vm 'docker version --format "docker server {{.Server.Version}}"; docker compose version'
 vm 'uci show firewall | grep -E "docker" | head -8; uci show network.docker 2>/dev/null | head -4'
 
+echo "== DNS 上游"
+check 'dnsmasq noresolv' 1 "$(vm 'uci -q get dhcp.@dnsmasq[0].noresolv')"
+check 'dnsmasq upstream servers' '223.5.5.5 119.29.29.29' "$(vm 'uci -q get dhcp.@dnsmasq[0].server')"
+check 'dnsmasq running config ignores the WAN servers' 1 "$(vm 'grep -c "^no-resolv$" /var/etc/dnsmasq.conf.*')"
+check 'dnsmasq running config servers' '119.29.29.29 223.5.5.5' "$(vm "sed -n 's/^server=//p' /var/etc/dnsmasq.conf.* | sort | xargs")"
+
 echo "== 局域网转发（Docker 已在运行）"
 # Ask the router directly: the host's resolver may answer getaddrinfo itself.
 check 'router DNS for the LAN' ok "$(lan sh -c 'busybox nslookup www.cloudflare.com 192.168.72.1 > /dev/null 2>&1 && echo ok || echo fail')"

@@ -40,6 +40,8 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test -L /tmp/inspect-root/etc/rc.d/S12dockerd-root-shared
         test -n "$(find /tmp/inspect-root/lib/modules -name nf_conntrack_netlink.ko)"
         echo "PASS: actual image contains Docker, Compose, conntrack netlink, the Docker LuCI page and the enabled data root propagation"
+        test -x /tmp/inspect-root/etc/uci-defaults/97-dnsmasq-upstream
+        echo "PASS: actual image contains the dnsmasq upstream default"
         test -x /tmp/inspect-root/usr/bin/ttyd
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-ttyd.json
         echo "PASS: actual image contains ttyd and its LuCI page"

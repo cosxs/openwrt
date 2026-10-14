@@ -46,6 +46,7 @@ check 'data marker' kept "$(vm 'cat /data/marker')"
 check 'docker images kept' "$images_before" "$(vm 'docker images --format "{{.Repository}}:{{.Tag}}" | sort | xargs')"
 check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
 check 'separate mount for the Docker data root' 0 "$(vm 'grep -c " /data/docker " /proc/mounts')"
+check 'dnsmasq upstream servers kept' '223.5.5.5 119.29.29.29' "$(vm 'uci -q get dhcp.@dnsmasq[0].server')"
 check 'pending uci-defaults' '' "$(vm 'ls /etc/uci-defaults' | xargs)"
 check 'sing-box enabled' 0 "$(vm 'uci -q get sing-box.main.enabled')"
 vm 'cat /proc/partitions | grep nvme'

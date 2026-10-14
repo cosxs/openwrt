@@ -1,0 +1,15 @@
+#!/bin/sh
+
+# Factory DNS forwarding: dnsmasq asks two fixed public resolvers and ignores
+# the servers the WAN hands out. Those can include the upstream router's IPv6
+# link-local address, and a firewall or tunnel on this router that redirects
+# DNS queries to a local resolver may not catch queries sent to such an
+# address. A dnsmasq section that already has a server list or a noresolv
+# setting, e.g. from kept settings, is left as it is.
+[ -n "$(uci -q get dhcp.@dnsmasq[0])" ] || exit 0
+[ -z "$(uci -q get dhcp.@dnsmasq[0].noresolv)" ] || exit 0
+[ -z "$(uci -q get dhcp.@dnsmasq[0].server)" ] || exit 0
+uci set dhcp.@dnsmasq[0].noresolv='1'
+uci add_list dhcp.@dnsmasq[0].server='223.5.5.5'
+uci add_list dhcp.@dnsmasq[0].server='119.29.29.29'
+uci commit dhcp
