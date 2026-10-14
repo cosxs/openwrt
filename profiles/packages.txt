@@ -7,10 +7,6 @@ luci-i18n-base-zh-cn
 luci-i18n-firewall-zh-cn
 luci-i18n-package-manager-zh-cn
 ucode-mod-fs
-nikki
-luci-app-nikki
-luci-i18n-nikki-zh-cn
-mihomo-meta
 kmod-tcp-bbr
 # ImageBuilder rejects name=version here. The pinned local APK is newer than the
 # official feed's sing-box; verify-image.sh fails if another version is chosen.

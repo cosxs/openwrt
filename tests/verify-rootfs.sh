@@ -273,8 +273,8 @@ cmp -s "$verify_tmp/defaults.firewall" /etc/config/firewall || fail 'repeated fi
 # Kept settings: offloading off and the WAN admin rule removed in LuCI, plus
 # a firewall include added by a package.
 cp "$verify_tmp/firewall" /etc/config/firewall
-uci set firewall.nikki=include
-uci set firewall.nikki.type=script
+uci set firewall.package_include=include
+uci set firewall.package_include.type=script
 uci commit firewall
 cp /etc/config/firewall "$verify_tmp/user.firewall"
 apply_firewall_defaults

@@ -45,9 +45,6 @@ fetch_verified() {
     fi
 }
 
-fetch_verified "$NIKKI_ARCHIVE_URL" \
-    "$download_dir/nikki-${NIKKI_VERSION}-x86_64-openwrt-${OPENWRT_VERSION%.*}.tar.gz" \
-    "$NIKKI_ARCHIVE_SHA256"
 fetch_verified "$SINGBOX_APK_URL" \
     "$download_dir/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" \
     "$SINGBOX_APK_SHA256"
@@ -74,9 +71,9 @@ cp "$profile_file" "$output_dir/build.env"
 cp "$project_dir/profiles/packages.txt" "$output_dir/requested-packages.txt"
 tar -czf "$output_dir/build-recipe.tar.gz" -C "$project_dir" \
     profiles files scripts tests .github/workflows/build.yml
-printf 'recipe_revision=%s\narchive_sha256=%s\nsingbox_apk_sha256=%s\nargon_apk_sha256=%s\n' \
+printf 'recipe_revision=%s\nsingbox_apk_sha256=%s\nargon_apk_sha256=%s\n' \
     "$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || printf uncommitted)" \
-    "$NIKKI_ARCHIVE_SHA256" "$SINGBOX_APK_SHA256" "$ARGON_APK_SHA256" > "$output_dir/build-info.txt"
+    "$SINGBOX_APK_SHA256" "$ARGON_APK_SHA256" > "$output_dir/build-info.txt"
 
 container_id=''
 cleanup() {

@@ -22,9 +22,6 @@ docker run --rm --platform linux/amd64 --user root --network none \
             -d /tmp/inspect-root /tmp/rootfs.img > /tmp/unsquashfs.log
         test -x /tmp/inspect-root/etc/board.d/03-defaults
         sh /work/tests/verify-rootfs.sh /tmp/inspect-root
-        test "$(chroot /tmp/inspect-root /sbin/uci -q get nikki.config.enabled)" = 0
-        chroot /tmp/inspect-root /usr/libexec/mihomo -v
-        echo "PASS: actual image contains disabled Nikki and stable Mihomo"
         test -n "$(find /tmp/inspect-root/lib/modules -name tcp_bbr.ko)"
         grep -qx "net.ipv4.tcp_congestion_control=bbr" \
             /tmp/inspect-root/etc/sysctl.d/12-tcp-bbr.conf
@@ -58,7 +55,7 @@ docker run --rm --platform linux/amd64 --user root --network none \
         grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
             grep -qx "V:$ARGON_VERSION"
         echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
-        for lmo in base firewall package-manager dockerman ttyd ddns nikki; do
+        for lmo in base firewall package-manager dockerman ttyd ddns; do
             test -f "/tmp/inspect-root/usr/lib/lua/luci/i18n/$lmo.zh-cn.lmo"
         done
         echo "PASS: actual image contains the Chinese translations of every LuCI page"

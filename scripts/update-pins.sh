@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Move the pinned build inputs in profiles/ to the latest upstream releases:
 # the newest OpenWrt point release of the pinned series with its ImageBuilder
-# digest, Nikki, sing-box and the Argon theme. Each new asset is downloaded
+# digest, sing-box and the Argon theme. Each new asset is downloaded
 # and hashed, and checked against the digest GitHub publishes for it.
 #
 # Prints "KEY: old -> new" per change. Lines starting with "notice:" need a
@@ -12,7 +12,6 @@ set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
 env_file="$project_dir/profiles/build.env"
-apks_file="$project_dir/profiles/nikki-apks.txt"
 source "$env_file"
 series=${OPENWRT_VERSION%.*}
 
@@ -89,34 +88,6 @@ if [[ -n $latest && $latest != "$OPENWRT_VERSION" ]]; then
     else
         echo "OpenWrt $latest has no ImageBuilder image $tag yet; keeping $OPENWRT_VERSION"
     fi
-fi
-
-# Nikki: the archive for this OpenWrt series and the APKs taken from it.
-release=$(github_release nikkinikki-org/OpenWrt-nikki)
-version=$(jq -r .tag_name <<< "$release")
-version=${version#v}
-asset="nikki_x86_64-openwrt-$series.tar.gz"
-if [[ $version != "$NIKKI_VERSION" ]]; then
-    sha256=$(fetch_asset "$release" "$asset")
-    tar -tzf "$work/$asset" | sed 's|^\./||' > "$work/nikki-files"
-    # Keep the file's order: core, service, LuCI app, translation.
-    for prefix in mihomo-meta nikki luci-app-nikki luci-i18n-nikki-zh-cn; do
-        matches=$(grep -E "^$prefix-[0-9][^/]*\.apk$" "$work/nikki-files" || true)
-        [[ $(grep -c . <<< "$matches") == 1 ]] || {
-            echo "expected one $prefix APK in $asset, found: ${matches:-none}" >&2
-            exit 1
-        }
-        echo "$matches"
-    done > "$work/nikki-apks"
-    if ! cmp -s "$work/nikki-apks" "$apks_file"; then
-        cat "$work/nikki-apks" > "$apks_file"
-        echo "nikki-apks.txt: $(xargs < "$work/nikki-apks")"
-    fi
-    set_var NIKKI_VERSION "$version"
-    set_var NIKKI_ARCHIVE_URL "$(asset_field "$release" "$asset" .browser_download_url)"
-    set_var NIKKI_ARCHIVE_SHA256 "$sha256"
-else
-    check_unchanged "$release" "$asset" "$NIKKI_ARCHIVE_SHA256"
 fi
 
 # sing-box OpenWrt APK.

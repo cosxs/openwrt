@@ -1,4 +1,0 @@
-mihomo-meta-1.19.32.apk
-nikki-2026.10.10-r1.apk
-luci-app-nikki-1.26.2-r1.apk
-luci-i18n-nikki-zh-cn-26.283.34061~31339d5.apk

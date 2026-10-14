@@ -13,17 +13,9 @@ if ! grep -q '^CONFIG_SIGNATURE_CHECK=y$' .config; then
     exit 1
 fi
 
-archive="/work/.build/downloads/nikki-${NIKKI_VERSION}-x86_64-openwrt-${OPENWRT_VERSION%.*}.tar.gz"
-echo "$NIKKI_ARCHIVE_SHA256  $archive" | sha256sum --check --status
 mkdir -p packages
 
-# Import only selected APK files. ImageBuilder generates and signs its own
-# local index; the upstream index and conflicting alpha core are not imported.
-while IFS= read -r apk; do
-    [[ -n "$apk" ]] || continue
-    tar -xzf "$archive" -C packages "./$apk"
-done < /work/profiles/nikki-apks.txt
-
+# ImageBuilder generates and signs its own local index for these APK files.
 # apk finds local packages as <name>-<version>.apk, whatever the release asset
 # is called; both are read from the package metadata.
 import_apk() {
