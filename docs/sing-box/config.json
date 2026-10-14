@@ -1,0 +1,188 @@
+{
+  "$schema": "https://sing-box.sagernet.org/schema.json",
+  "log": {
+    "disabled": false,
+    "level": "warn",
+    "timestamp": true
+  },
+  "dns": {
+    "servers": [
+      {
+        "type": "quic",
+        "tag": "dns-direct",
+        "server": "223.5.5.5"
+      },
+      {
+        "type": "fakeip",
+        "tag": "dns-fakeip",
+        "inet4_range": "198.18.0.0/15",
+        "inet6_range": "fc00::/18"
+      },
+      {
+        "type": "https",
+        "tag": "dns-cloudflare",
+        "server": "1.1.1.1",
+        "detour": "proxy"
+      }
+    ],
+    "rules": [
+      {
+        "action": "evaluate",
+        "server": "dns-direct",
+        "tag": "direct",
+        "timeout": "2s"
+      },
+      {
+        "match_response": "direct",
+        "rule_set": "cn-mainland-ip",
+        "action": "respond"
+      },
+      {
+        "match_response": "direct",
+        "response_rcode": "NOERROR",
+        "ip_accept_any": true,
+        "query_type": [
+          "A",
+          "AAAA"
+        ],
+        "action": "route",
+        "server": "dns-fakeip"
+      },
+      {
+        "match_response": "direct",
+        "response_rcode": "NOERROR",
+        "action": "respond"
+      },
+      {
+        "match_response": "direct",
+        "response_rcode": "NXDOMAIN",
+        "action": "respond"
+      },
+      {
+        "query_type": [
+          "A",
+          "AAAA"
+        ],
+        "action": "route",
+        "server": "dns-fakeip"
+      }
+    ],
+    "final": "dns-cloudflare"
+  },
+  "inbounds": [
+    {
+      "type": "tun",
+      "tag": "tun-in",
+      "interface_name": "sb-tun",
+      "address": [
+        "10.255.255.1/30",
+        "fd10:255:255::1/126"
+      ],
+      "auto_route": true,
+      "auto_redirect": true,
+      "route_exclude_address_set": [
+        "cn-mainland-ip"
+      ]
+    },
+    {
+      "type": "mixed",
+      "tag": "mixed-in",
+      "listen": "::",
+      "listen_port": 6088
+    }
+  ],
+  "outbounds": [
+    {
+      "type": "shadowsocks",
+      "tag": "node",
+      "server": "203.0.113.1",
+      "server_port": 8388,
+      "method": "2022-blake3-aes-128-gcm",
+      "password": "Q0hBTkdFX01FX0tFWV8xNg=="
+    },
+    {
+      "type": "selector",
+      "tag": "proxy",
+      "outbounds": [
+        "node"
+      ],
+      "default": "node"
+    },
+    {
+      "type": "direct",
+      "tag": "direct"
+    }
+  ],
+  "http_clients": [
+    {
+      "tag": "via-proxy",
+      "detour": "proxy"
+    }
+  ],
+  "route": {
+    "rules": [
+      {
+        "action": "sniff"
+      },
+      {
+        "protocol": "dns",
+        "action": "hijack-dns"
+      },
+      {
+        "ip_is_private": true,
+        "outbound": "direct"
+      },
+      {
+        "rule_set": [
+          "cn-mainland-ip"
+        ],
+        "outbound": "direct"
+      },
+      {
+        "type": "logical",
+        "mode": "or",
+        "rules": [
+          {
+            "port": 853
+          },
+          {
+            "network": "udp",
+            "port": 443
+          }
+        ],
+        "action": "reject"
+      }
+    ],
+    "rule_set": [
+      {
+        "type": "remote",
+        "tag": "cn-mainland-ip",
+        "format": "binary",
+        "url": "https://raw.githubusercontent.com/cosxs/cn-mainland-ip/main/release/sing-box/cn.srs",
+        "http_client": "via-proxy"
+      }
+    ],
+    "final": "proxy",
+    "auto_detect_interface": true,
+    "default_domain_resolver": "dns-direct"
+  },
+  "services": [
+    {
+      "type": "api",
+      "tag": "api",
+      "listen": "::",
+      "listen_port": 9090,
+      "secret": "CHANGE_ME",
+      "dashboard": {
+        "enabled": true,
+        "http_client": "via-proxy"
+      }
+    }
+  ],
+  "experimental": {
+    "cache_file": {
+      "enabled": true,
+      "store_fakeip": true
+    }
+  }
+}

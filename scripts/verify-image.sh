@@ -30,6 +30,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         singbox_version=$(chroot /tmp/inspect-root /usr/bin/sing-box version)
         grep -qx "sing-box version $SINGBOX_VERSION" <<< "$singbox_version"
         echo "PASS: actual image contains disabled sing-box $SINGBOX_VERSION"
+        cp /work/docs/sing-box/config.json /tmp/inspect-root/tmp/sing-box-template.json
+        chroot /tmp/inspect-root /usr/bin/sing-box check -c /tmp/sing-box-template.json
+        echo "PASS: the sing-box template in docs passes sing-box check"
         chroot /tmp/inspect-root /usr/bin/dockerd --version
         chroot /tmp/inspect-root /usr/bin/docker --version
         chroot /tmp/inspect-root /usr/bin/docker-compose version
