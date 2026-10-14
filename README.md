@@ -17,9 +17,9 @@
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
 | 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；剩余空间不少于 2 GiB 时，数据分区让出盘尾的 1 GiB 给下面的 swap 分区；sysupgrade 和恢复出厂都不改动它 |
 | Swap 分区 | 盘尾 1 GiB 的分区（分区名和卷标都是 `swap`），全新写盘后首次启动时与数据分区一起建好；`fstab` 里有一条按卷标 `swap` 启用的 swap 段，开机由系统自带的 `block mount` 启用。剩余空间不足 2 GiB 时不建，只有数据分区。已经建好数据分区的盘（保留配置升级、或旧版固件装的盘）不会补建 swap 分区，需要时见“写盘”手动创建。不需要 swap 时，在 LuCI“系统 → 挂载点”里停用它，或删去 fstab 的 swap 段；sysupgrade 和恢复出厂不改动这个分区 |
-| 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面、UPnP IGD 和 NAT-PMP 端口映射（官方 `miniupnpd-nftables`）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
+| 软件 | LuCI（默认主题 Footstrap，另带官方 Bootstrap）、中文界面、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面、UPnP IGD 和 NAT-PMP 端口映射（官方 `miniupnpd-nftables`）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
 | Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）监听所有地址的 7681 端口，需 root 登录；WAN 侧只对上游内网放行（见“WAN 侧管理”） |
-| LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
+| LuCI 主题 | 默认主题 [Footstrap](https://github.com/VizzleTF/luci-theme-footstrap)，用官方 luci 软件源里的 `luci-theme-footstrap`（只依赖 `luci-base`，版本随官方源，不单独固定）。出厂时由 `29-luci-default-theme` 设为默认：luci 的出厂配置本来就写着 Bootstrap，两个主题包自带的首次启动脚本都不会改动已有的选择。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的主题。Footstrap 不联网获取壁纸或字体；它自带的设置项没有中文翻译（上游只提供 es、ru），固件不安装这两个语言包 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1`。审核过的配置模板、部署步骤和各字段说明见 [`docs/sing-box/`](docs/sing-box/README.md) |
 | DDNS 初始状态 | 未配置，也没有上游包自带的两条示例服务。本机在其他路由器后面时 WAN 是内网地址，记录要用“通过网页查询公网 IP”（`ip_source` 设为 `web`），否则会把内网地址写进 DNS。Cloudflare API 令牌只在设备上填写，不进固件和仓库。DDNS 只更新记录，不提供公网 IPv4 |
 | UPnP 初始状态 | 出厂关闭（上游默认），在 LuCI“服务”菜单的 UPnP 页面开启。上游默认只允许设备为自己的地址映射 1024–65535 端口。端口映射规则由 fw4 自动加载，不改动防火墙配置。WAN 是内网地址（本机在其他路由器后面）时 miniupnpd 不做端口映射，要用 UPnP 需要本机拨号直接拿到公网 IPv4，或在 UPnP 设置里开启 STUN 探测外层的公网地址；外层 NAT 是限制型时，开启 STUN 也无法映射 |
@@ -50,7 +50,7 @@
 ./scripts/verify-image.sh artifacts/<版本>/<时间>/*-squashfs-rootfs.img.gz
 ```
 
-检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置、开机时把 Docker 数据目录所在的挂载点设为 shared（根文件系统除外），Argon 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、UPnP 默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
+检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置、开机时把 Docker 数据目录所在的挂载点设为 shared（根文件系统除外），Footstrap 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、UPnP 默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
 
 `tests/vm/` 在 QEMU 虚拟机里测试完整磁盘镜像（需要 root、`qemu-system-x86`、`ovmf`、`sshpass`、`busybox`、`miniupnpc`，有 KVM 时自动使用）：
 
@@ -65,7 +65,7 @@ sudo tests/vm/run.sh artifacts/<版本>/<时间>/*-squashfs-combined-efi.img.gz
 GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
 - 触发：每天北京时间 03:37 定时运行，以及在 Actions 页面手动运行（可选“强制构建”）。推送代码不会触发构建，配方的改动在下一次定时或手动运行时构建发布。
-- 每次运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest、sing-box 和 Argon。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
+- 每次运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest 和 sing-box。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
 - 然后只解析软件包（`build.sh --manifest-only`），由 `scripts/build-state.sh` 计算配方文件和包清单的状态，与最近一次 Release 附带的 `build-state.txt` 比较；没有变化就结束，不构建。官方软件源里的包更新也会体现在包清单里。
 - 有变化时构建，依次运行镜像检查和虚拟机测试（GitHub 的 Linux runner 支持 KVM）。全部通过后由 `scripts/release.sh` 发布：先把更新后的固定版本提交并推送到 `main`，再创建 Release，附带磁盘镜像、包清单、构建信息、`build-state.txt`、检查日志和 `SHA256SUMS`，说明里列出配方更新和相对上一个 Release 的软件包版本变化。任何一步失败都不提交、不发布，GitHub 会发邮件通知。
 - 不会自动刷机：刷机仍按“写盘”或保留配置的 sysupgrade 手动进行。
@@ -73,13 +73,14 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
 ## 配方
 
-- `profiles/build.env`：官方版本、容器 digest、分区大小，以及 sing-box APK 和 Argon 主题 APK 的来源/摘要。
+- `profiles/build.env`：官方版本、容器 digest、分区大小，以及 sing-box APK 的来源/摘要。
 - `profiles/packages.txt`：在官方 generic 默认包基础上增加的软件。
 - `files/lib/preinit/01_sysinfo_dmi_default`：开机早期在上游 x86 的 `01_sysinfo` 之后运行。有些主板 BIOS 把 DMI 的系统厂商或产品型号填成单独的 `Default`，上游脚本不把它当占位词，LuCI 就会显示型号 `Default Default`；这时改用主板厂商和主板型号（与上游对 `Default string` 等占位词的处理相同），主板字段也是占位词时保留上游结果。
 - `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址和时区。
 - `files/etc/uci-defaults/90-initial-root-password`：初始 root 密码，只保存 SHA-512 crypt 哈希。
 - `files/etc/uci-defaults/91-zonename`：为新生成的时区补上 LuCI 使用的时区名。
 - `files/etc/uci-defaults/92-firewall-defaults`：防火墙仍是出厂配置时，开启软件流量分载，并加入地址集合 `wan_admin_subnet`（从 `/etc/wan-admin-subnet` 加载）和引用它的 `wan_private_admin` 规则（仅 IPv4：WAN 口可能同时有公网 IPv6 地址，不能对 IPv6 开放）。
+- `files/etc/uci-defaults/29-luci-default-theme`：luci 配置仍是出厂版本时，把默认主题设为 Footstrap。名字排在两个主题包的 `30_luci-theme-*` 之前：它们只注册主题，遇到已有的 `mediaurlbase` 不改动，出厂配置里这一项是 Bootstrap。保留配置升级时 luci 配置已和出厂版本不同，沿用设备上的选择。
 - `files/etc/hotplug.d/iface/30-wan-admin-subnet`：WAN 连上或地址变化时计算当前网段，只有内网 IPv4 且前缀在 /8–/30 之间才写入 `/etc/wan-admin-subnet`，否则写空；内容变化时执行 `fw4 reload-sets`。直接按“WAN 当前网段”放行并不安全：光猫桥接后用 DHCP/IPoE 拿到公网地址时，当前网段就是运营商的公网网段。
 - `files/etc/wan-admin-subnet`：上述地址文件的出厂版本（空）。放在 `/etc` 而不是 `/var/run`，是为了防火墙在网络启动前加载时文件一定存在。
 - `files/etc/config/ddns`：上游包的配置文件，只保留 `global` 段，去掉 `myddns_ipv4`、`myddns_ipv6` 两条示例服务（服务商 dyndns.org 未安装，账号和域名都是占位文字）。DDNS 服务仍随系统启用，只运行在 LuCI 中启用的条目；它是包声明的 conffile，保留配置升级沿用设备上的版本。
@@ -100,7 +101,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
 网络布局通过官方 `board.d` 和 `config_generate` 机制生成。首次安装、恢复出厂会采用上述布局；保留配置升级会继续使用已经保存的 `/etc/config/network`。因此从目前的原版官方镜像保留设置升级时，旧的端口配置也会保留，不能期待刷入后自动换口。首次使用新布局可采用全新写盘，或在升级时明确选择不保留旧设置。
 
-sing-box 和 Argon 的 APK 校验固定 SHA256 后导入。官方 ImageBuilder 会为它们建立并签署本地索引，安装时保持 `CONFIG_SIGNATURE_CHECK=y`。这个信任过程依据已固定的发布资产摘要，不表示已经验证上游的签名。构建中的本地签名私钥只存在于临时容器，不纳入镜像或 Artifact。
+sing-box 的 APK 校验固定 SHA256 后导入。官方 ImageBuilder 会为它建立并签署本地索引，安装时保持 `CONFIG_SIGNATURE_CHECK=y`。这个信任过程依据已固定的发布资产摘要，不表示已经验证上游的签名。构建中的本地签名私钥只存在于临时容器，不纳入镜像或 Artifact。
 
 本配方目前使用官方运行时软件源；自有源域名及镜像托管方案确定后，可分别配置 ImageBuilder 下载源和固件里的 APK 源。sing-box 配置、SSH 密钥需要在设备上设置。
 
@@ -128,4 +129,4 @@ sing-box 和 Argon 的 APK 校验固定 SHA256 后导入。官方 ImageBuilder �
 - [官方 ImageBuilder](https://openwrt.org/docs/guide-user/additional-software/imagebuilder)
 - [官方网络默认生成器](https://github.com/openwrt/openwrt/blob/v25.12.5/package/base-files/files/bin/config_generate)
 - [sing-box](https://github.com/SagerNet/sing-box/releases)
-- [luci-theme-argon](https://github.com/jerrykuku/luci-theme-argon/releases)
+- [luci-theme-footstrap](https://github.com/VizzleTF/luci-theme-footstrap)

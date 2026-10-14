@@ -54,12 +54,12 @@ echo "== 网页管理与初始密码"
 check 'LuCI login page (unauthenticated)' 403 "$(lan curl -s -o /dev/null -m 30 -w '%{http_code}' http://192.168.72.1/cgi-bin/luci/)"
 check 'LuCI login with initial password' 302 "$(lan curl -s -o /dev/null -m 60 -w '%{http_code}' \
     --data-urlencode luci_username=root --data-urlencode "luci_password=$SSHPASS" http://192.168.72.1/cgi-bin/luci/)"
-check 'LuCI themes' 'Argon Bootstrap BootstrapDark BootstrapLight' \
+check 'LuCI themes' 'Bootstrap BootstrapDark BootstrapLight Footstrap' \
     "$(vm "uci show luci.themes | sed -n 's/^luci\.themes\.\([^=]*\)=.*/\1/p'" | xargs)"
-check 'LuCI theme' /luci-static/argon "$(vm 'uci -q get luci.main.mediaurlbase')"
-check 'overview page uses Argon' yes "$(lan sh -c 'c=$(mktemp); curl -s -m 60 -c "$c" -o /dev/null \
+check 'LuCI theme' /luci-static/footstrap "$(vm 'uci -q get luci.main.mediaurlbase')"
+check 'overview page uses Footstrap' yes "$(lan sh -c 'c=$(mktemp); curl -s -m 60 -c "$c" -o /dev/null \
     --data-urlencode luci_username=root --data-urlencode "luci_password=$SSHPASS" http://192.168.72.1/cgi-bin/luci/
-    curl -s -m 120 -b "$c" http://192.168.72.1/cgi-bin/luci/admin/status/overview | grep -q /luci-static/argon/ && echo yes || echo no
+    curl -s -m 120 -b "$c" http://192.168.72.1/cgi-bin/luci/admin/status/overview | grep -q /luci-static/footstrap/ && echo yes || echo no
     rm -f "$c"')"
 
 echo "== WAN 侧管理（WAN 网段 10.0.2.0/24，来源 10.0.2.2，经 QEMU 端口转发）"

@@ -23,7 +23,8 @@ for verify_file in \
     etc/uci-defaults/97-dnsmasq-upstream etc/uci-defaults/98-swap-mount \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
     lib/functions/network.sh bin/ipcalc.sh \
-    etc/uci-defaults/30_luci-theme-argon etc/uci-defaults/30_luci-theme-bootstrap \
+    etc/uci-defaults/29-luci-default-theme \
+    etc/uci-defaults/30_luci-theme-footstrap etc/uci-defaults/30_luci-theme-bootstrap \
     etc/config/luci \
     usr/share/libubox/jshn.sh etc/config/dhcp etc/config/firewall; do
     [ -f "$verify_root/$verify_file" ] || {
@@ -429,33 +430,40 @@ assert_equal '' "$(cat "$verify_tmp/fw4.calls")" 'set reload for another interfa
 cp "$verify_tmp/network.sh" /lib/functions/network.sh
 echo 'PASS: WAN admin set follows a private WAN subnet and stays empty for public, CGNAT, point-to-point or missing addresses'
 
-# 12. LuCI theme. The theme packages' first-boot scripts run in glob order, as
-# /etc/init.d/boot runs them: Argon registers first and selects itself, and
-# Bootstrap keeps an existing selection. LuCI falls back to the first
-# registered theme when the configured one is missing.
+# 12. LuCI theme. The shipped luci config names Bootstrap, and neither theme
+# package's first-boot script replaces an existing selection, so
+# 29-luci-default-theme selects Footstrap while the luci config is still the
+# shipped one. The scripts run in glob order, as /etc/init.d/boot runs them.
+# The extracted root has no squashfs lower layer, so model /rom with the
+# shipped luci config. LuCI falls back to the first registered theme when the
+# configured one is missing.
 apply_theme_scripts() {
-    for theme_script in /etc/uci-defaults/30_luci-theme-*; do
+    for theme_script in /etc/uci-defaults/29-luci-default-theme /etc/uci-defaults/30_luci-theme-*; do
         (cd /etc/uci-defaults && . "$theme_script") || fail "$theme_script failed"
     done
 }
 registered_themes() {
     uci show luci.themes | sed -n "s/^luci\.themes\.\([^=]*\)=.*/\1/p" | xargs
 }
-[ -d /www/luci-static/argon ] || fail 'Argon theme files missing'
+[ -d /www/luci-static/footstrap ] || fail 'Footstrap theme files missing'
 [ -d /www/luci-static/bootstrap ] || fail 'Bootstrap theme files missing'
+[ ! -e /www/luci-static/argon ] || fail 'Argon theme files present'
+mkdir -p /rom/etc/config
+cp /etc/config/luci /rom/etc/config/luci
+assert_equal /luci-static/bootstrap "$(uci -q get luci.main.mediaurlbase)" 'shipped LuCI theme'
 apply_theme_scripts
-assert_equal /luci-static/argon "$(uci -q get luci.main.mediaurlbase)" 'factory LuCI theme'
-assert_equal 'Argon Bootstrap BootstrapDark BootstrapLight' "$(registered_themes)" 'registered LuCI themes'
-cp /etc/config/luci "$verify_tmp/argon.luci"
+assert_equal /luci-static/footstrap "$(uci -q get luci.main.mediaurlbase)" 'factory LuCI theme'
+assert_equal 'Bootstrap BootstrapDark BootstrapLight Footstrap' "$(registered_themes)" 'registered LuCI themes'
+cp /etc/config/luci "$verify_tmp/footstrap.luci"
 apply_theme_scripts
-cmp -s "$verify_tmp/argon.luci" /etc/config/luci || fail 'repeated theme scripts changed luci'
+cmp -s "$verify_tmp/footstrap.luci" /etc/config/luci || fail 'repeated theme scripts changed luci'
 # Kept settings: Bootstrap chosen in LuCI stays selected when the theme
 # scripts run again after an upgrade.
 uci set luci.main.mediaurlbase='/luci-static/bootstrap'
 uci commit luci
 apply_theme_scripts
 assert_equal /luci-static/bootstrap "$(uci -q get luci.main.mediaurlbase)" 'kept Bootstrap theme'
-echo 'PASS: Argon is the factory LuCI theme and first fallback with Bootstrap installed; a theme chosen in LuCI is kept'
+echo 'PASS: Footstrap is the factory LuCI theme with Bootstrap installed; a theme chosen in LuCI is kept'
 # 13. Data and swap partitions on a freshly written disk. No disk is touched:
 # a fake sysfs describes the boot disk, common.sh only names its partitions,
 # and parted, partx, mkfs.ext4, mkswap and blkid are stubs that record their

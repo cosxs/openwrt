@@ -13,7 +13,6 @@ image_name=$(basename "$1")
 docker run --rm --platform linux/amd64 --user root --network none \
     --env "VERIFY_IMAGE=$image_name" \
     --env "SINGBOX_VERSION=$SINGBOX_VERSION" \
-    --env "ARGON_VERSION=$ARGON_VERSION" \
     --mount "type=bind,source=$image_dir,target=/input,readonly" \
     --mount "type=bind,source=$project_dir,target=/work,readonly" \
     "$IMAGEBUILDER_IMAGE" /bin/bash -euo pipefail -c '
@@ -64,9 +63,9 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test "$(chroot /tmp/inspect-root /sbin/uci -q get upnpd.config.enabled)" = 0
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-upnp.json
         echo "PASS: actual image contains disabled miniupnpd for nftables and its LuCI page"
-        grep -A1 -x "P:luci-theme-argon" /tmp/inspect-root/lib/apk/db/installed |
-            grep -qx "V:$ARGON_VERSION"
-        echo "PASS: actual image contains the Argon $ARGON_VERSION LuCI theme"
+        grep -qx "P:luci-theme-footstrap" /tmp/inspect-root/lib/apk/db/installed
+        test -f /tmp/inspect-root/www/luci-static/footstrap/cascade.css
+        echo "PASS: actual image contains the Footstrap LuCI theme from the official feed"
         for lmo in base firewall package-manager dockerman ttyd ddns upnp; do
             test -f "/tmp/inspect-root/usr/lib/lua/luci/i18n/$lmo.zh-cn.lmo"
         done

@@ -1,8 +1,8 @@
 # Preserve the official generic profile's default system and hardware packages.
 luci
-# Third-party theme from the pinned local APK; its first-boot script makes it
+# Theme from the official luci feed; uci-defaults/29-luci-default-theme makes it
 # the default LuCI theme. luci brings the official Bootstrap too.
-luci-theme-argon
+luci-theme-footstrap
 luci-i18n-base-zh-cn
 luci-i18n-firewall-zh-cn
 luci-i18n-package-manager-zh-cn

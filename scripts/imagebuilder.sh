@@ -31,7 +31,6 @@ apk_field() {
         sed -n "/^info:/,/^[a-z]/s/^  $2: //p"
 }
 import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
-import_apk "/work/.build/downloads/luci-theme-argon-${ARGON_VERSION}.apk" "$ARGON_APK_SHA256"
 
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
     /work/profiles/packages.txt | tr '\n' ' ')

@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Move the pinned build inputs in profiles/ to the latest upstream releases:
 # the newest OpenWrt point release of the pinned series with its ImageBuilder
-# digest, sing-box and the Argon theme. Each new asset is downloaded
-# and hashed, and checked against the digest GitHub publishes for it.
+# digest and sing-box. Each new asset is downloaded and hashed, and checked
+# against the digest GitHub publishes for it.
 #
 # Prints "KEY: old -> new" per change. Lines starting with "notice:" need a
 # person: a newer OpenWrt release series, which needs a manual review, or an
@@ -102,20 +102,4 @@ if [[ $version != "$SINGBOX_VERSION" ]]; then
     set_var SINGBOX_APK_SHA256 "$sha256"
 else
     check_unchanged "$release" "$asset" "$SINGBOX_APK_SHA256"
-fi
-
-# Argon theme APK; its file name carries the package version.
-release=$(github_release jerrykuku/luci-theme-argon)
-asset=$(jq -r '[.assets[].name | select(test("^luci-theme-argon-[0-9][^/]*\\.apk$"))]
-    | if length == 1 then .[0] else empty end' <<< "$release")
-[[ -n $asset ]] || { echo 'expected one luci-theme-argon APK in the Argon release' >&2; exit 1; }
-version=${asset#luci-theme-argon-}
-version=${version%.apk}
-if [[ $version != "$ARGON_VERSION" ]]; then
-    sha256=$(fetch_asset "$release" "$asset")
-    set_var ARGON_VERSION "$version"
-    set_var ARGON_APK_URL "$(asset_field "$release" "$asset" .browser_download_url)"
-    set_var ARGON_APK_SHA256 "$sha256"
-else
-    check_unchanged "$release" "$asset" "$ARGON_APK_SHA256"
 fi

@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# Factory LuCI theme: Footstrap. The theme packages' own first-boot scripts
+# (30_luci-theme-*) cannot select it: the shipped luci config already names
+# Bootstrap, and both scripts leave an existing selection alone. This runs
+# before them, only while the luci config is still the shipped one; a config
+# restored from kept settings keeps the theme chosen in LuCI.
+cmp -s /etc/config/luci /rom/etc/config/luci || exit 0
+uci set luci.main.mediaurlbase='/luci-static/footstrap'
+uci commit luci
