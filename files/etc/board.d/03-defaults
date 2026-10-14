@@ -1,6 +1,6 @@
 #!/bin/sh
 
-# Factory network, hostname and timezone. board_detect sets CFG to its
+# Factory network and timezone. board_detect sets CFG to its
 # temporary board file. Saved UCI settings are handled by config_generate and
 # are not modified here.
 #
@@ -30,7 +30,6 @@ if (length(lan_ports))
 // config_generate has no zone name field; uci-defaults completes it for LuCI.
 if (type(board.system) != "object")
     board.system = {};
-board.system.hostname = "linuxserver";
 board.system.timezone = "CST-8";
 
 let output = sprintf("%J\n", board);

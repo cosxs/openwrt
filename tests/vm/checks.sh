@@ -11,7 +11,7 @@ lan ip route show default | sed 's/^/client route: /'
 
 echo "== 系统"
 vm 'grep DISTRIB_DESCRIPTION /etc/openwrt_release; uname -r; [ -d /sys/firmware/efi ] && echo boot=UEFI; cut -d" " -f1 /proc/uptime'
-check hostname linuxserver "$(vm 'uci -q get system.@system[0].hostname')"
+check hostname OpenWrt "$(vm 'uci -q get system.@system[0].hostname')"
 check zonename Asia/Shanghai "$(vm 'uci -q get system.@system[0].zonename')"
 check timezone CST-8 "$(vm 'uci -q get system.@system[0].timezone')"
 check 'date +%Z' CST "$(vm 'date +%Z')"

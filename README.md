@@ -11,7 +11,7 @@
 | 网络加速 | BBR（`kmod-tcp-bbr`）；本机 TCP 缓冲区等调优；软件流量分载出厂开启，保留配置升级沿用设备上的设置 |
 | WAN 侧管理 | 出厂允许来自 WAN 口当前所在网段的 SSH（22）、网页管理（80）和网页终端（7681），且只在该网段属于内网 IPv4 时生效：在任意品牌的家用路由器后面时只放行上游局域网；WAN 拿到公网地址、PPPoE 点对点地址或断开时不放行任何来源。IPv6 仍全部拒绝。保留配置升级沿用设备上的防火墙设置 |
 | 初始密码 | `root` / `159357`，仅在 root 无密码时于首次启动设置；保留配置升级沿用设备上的密码。仓库和固件都是公开的，加上 WAN 侧管理默认对上游内网开放，首次登录后应立即修改 |
-| 主机名 / 时区 | `linuxserver` / `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
+| 主机名 / 时区 | `OpenWrt`（上游默认）/ `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
 | DNS 上游 | dnsmasq 出厂只向 `223.5.5.5` 和 `119.29.29.29` 转发（`noresolv`），不使用 WAN 下发的 DNS。WAN 下发的 DNS 里可能有上游路由器的 IPv6 链路本地地址，路由器上的防火墙或隧道把 DNS 查询重定向到本机解析器时，这种地址的查询可能拦截不到。DHCP 仍把本机作为 LAN 的 DNS。保留配置升级沿用设备上的设置；在 LuCI“网络 → DHCP/DNS”中可改回 WAN 下发的 DNS（取消“忽略解析文件”并删去 DNS 转发） |
 | 引导分区 | 64 MiB（官方默认 16 MiB，内核和 GRUB 约占 6.3 MiB）。保留配置升级时，配置备份暂存在这个分区里，放大后可容纳更大的备份 |
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
@@ -76,7 +76,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `profiles/build.env`：官方版本、容器 digest、分区大小，以及 sing-box APK 和 Argon 主题 APK 的来源/摘要。
 - `profiles/packages.txt`：在官方 generic 默认包基础上增加的软件。
 - `files/lib/preinit/01_sysinfo_dmi_default`：开机早期在上游 x86 的 `01_sysinfo` 之后运行。有些主板 BIOS 把 DMI 的系统厂商或产品型号填成单独的 `Default`，上游脚本不把它当占位词，LuCI 就会显示型号 `Default Default`；这时改用主板厂商和主板型号（与上游对 `Default string` 等占位词的处理相同），主板字段也是占位词时保留上游结果。
-- `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址、主机名和时区。
+- `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址和时区。
 - `files/etc/uci-defaults/90-initial-root-password`：初始 root 密码，只保存 SHA-512 crypt 哈希。
 - `files/etc/uci-defaults/91-zonename`：为新生成的时区补上 LuCI 使用的时区名。
 - `files/etc/uci-defaults/92-firewall-defaults`：防火墙仍是出厂配置时，开启软件流量分载，并加入地址集合 `wan_admin_subnet`（从 `/etc/wan-admin-subnet` 加载）和引用它的 `wan_private_admin` 规则（仅 IPv4：WAN 口可能同时有公网 IPv6 地址，不能对 IPv6 开放）。

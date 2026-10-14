@@ -213,7 +213,7 @@ apply_zonename_default() {
 rm -f /etc/board.json /etc/config/system
 /bin/board_detect
 /bin/config_generate
-assert_equal linuxserver "$(uci -q get system.@system[0].hostname)" 'hostname'
+assert_equal OpenWrt "$(uci -q get system.@system[0].hostname)" 'hostname'
 assert_equal CST-8 "$(uci -q get system.@system[0].timezone)" 'timezone'
 assert_equal UTC "$(uci -q get system.@system[0].zonename)" 'generated zone name'
 apply_zonename_default
@@ -232,7 +232,7 @@ rm -f /etc/board.json
 /bin/config_generate
 apply_zonename_default
 cmp -s "$verify_tmp/user.system" /etc/config/system || fail 'kept system settings were changed'
-echo 'PASS: factory hostname linuxserver and Asia/Shanghai; kept system settings are unchanged'
+echo 'PASS: factory hostname OpenWrt and Asia/Shanghai; kept system settings are unchanged'
 
 # 7. Factory firewall defaults: flow offloading and WAN admin access from the
 # WAN's own private subnet (a set filled by hotplug, see step 11). The
