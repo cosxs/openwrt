@@ -20,7 +20,7 @@ for verify_file in \
     lib/preinit/01_sysinfo lib/preinit/01_sysinfo_dmi_default \
     etc/uci-defaults/94-dockerd-defaults etc/config/dockerd etc/init.d/dockerd-root-shared \
     etc/uci-defaults/95-docker-firewall \
-    etc/uci-defaults/97-dnsmasq-upstream \
+    etc/uci-defaults/97-dnsmasq-upstream etc/uci-defaults/98-swap-mount \
     etc/hotplug.d/iface/30-wan-admin-subnet etc/wan-admin-subnet \
     lib/functions/network.sh bin/ipcalc.sh \
     etc/uci-defaults/30_luci-theme-argon etc/uci-defaults/30_luci-theme-bootstrap \
@@ -456,10 +456,10 @@ uci commit luci
 apply_theme_scripts
 assert_equal /luci-static/bootstrap "$(uci -q get luci.main.mediaurlbase)" 'kept Bootstrap theme'
 echo 'PASS: Argon is the factory LuCI theme and first fallback with Bootstrap installed; a theme chosen in LuCI is kept'
-# 13. Data partition on a freshly written disk. No disk is touched: a fake
-# sysfs describes the boot disk, common.sh only names its partitions, and
-# parted, partx, mkfs.ext4 and blkid are stubs that record their calls; partx
-# adds the partition that mkpart asked for to the fake sysfs.
+# 13. Data and swap partitions on a freshly written disk. No disk is touched:
+# a fake sysfs describes the boot disk, common.sh only names its partitions,
+# and parted, partx, mkfs.ext4, mkswap and blkid are stubs that record their
+# calls; partx adds the partitions that mkpart asked for to the fake sysfs.
 cp /lib/upgrade/common.sh "$verify_tmp/common.sh"
 cat > /lib/upgrade/common.sh <<'STUB'
 export_bootdevice() { :; }
@@ -478,34 +478,46 @@ cat > "$verify_tmp/stub/parted" <<'STUB'
 #!/bin/sh
 echo "parted $*" >> "$CALLS"
 [ "$3" = mkpart ] || exit 0
-[ -z "$TEST_MKPART_FAIL" ] || exit 1
-echo "${6%s}" > "$STATE/mkpart.start"
+# TEST_MKPART_FAIL names the partition whose mkpart fails.
+[ "$TEST_MKPART_FAIL" != "$4" ] || exit 1
+number=$(( $(ls "$STATE"/mkpart.* 2> /dev/null | wc -l) + 3 ))
+echo "$4 ${6%s}" > "$STATE/mkpart.$number"
 STUB
 cat > "$verify_tmp/stub/partx" <<'STUB'
 #!/bin/sh
 echo "partx $*" >> "$CALLS"
-if [ -f "$STATE/mkpart.start" ]; then
-    case "$TEST_DISK" in nvme*) dev=${TEST_DISK}p3 ;; *) dev=${TEST_DISK}3 ;; esac
+for file in "$STATE"/mkpart.*; do
+    [ -f "$file" ] || continue
+    number=${file##*.}
+    read -r name start < "$file"
+    case "$TEST_DISK" in nvme*) dev=${TEST_DISK}p$number ;; *) dev=$TEST_DISK$number ;; esac
     mkdir -p "/sys/block/$TEST_DISK/$dev"
-    echo 3 > "/sys/block/$TEST_DISK/$dev/partition"
-    cp "$STATE/mkpart.start" "/sys/block/$TEST_DISK/$dev/start"
-    printf 'PARTN=3\nPARTNAME=data\n' > "/sys/block/$TEST_DISK/$dev/uevent"
+    echo "$number" > "/sys/block/$TEST_DISK/$dev/partition"
+    echo "$start" > "/sys/block/$TEST_DISK/$dev/start"
+    printf 'PARTN=%s\nPARTNAME=%s\n' "$number" "$name" > "/sys/block/$TEST_DISK/$dev/uevent"
     ln -s "/sys/block/$TEST_DISK/$dev" "/sys/class/block/$dev"
-fi
+done
 # Like partx, report an error for the partitions in use.
 exit 1
 STUB
 printf '#!/bin/sh\necho "mkfs.ext4 $*" >> "$CALLS"\n' > "$verify_tmp/stub/mkfs.ext4"
+printf '#!/bin/sh\necho "mkswap $*" >> "$CALLS"\n' > "$verify_tmp/stub/mkswap"
 cat > "$verify_tmp/stub/blkid" <<'STUB'
 #!/bin/sh
 # blkid -L LABEL, or blkid -p -o value -s TAG DEVICE.
 case "$1 $5" in
     '-L '*) [ -n "$TEST_DATA_LABEL" ] ;;
     '-p PART_ENTRY_NAME') sed -n 's/^PARTNAME=//p' "/sys/class/block/${6#/dev/}/uevent" ;;
-    '-p TYPE') [ -z "$TEST_FS_TYPE" ] || echo "$TEST_FS_TYPE" ;;
+    '-p TYPE')
+        case "$6" in
+            *3) [ -z "$TEST_FS_TYPE" ] || echo "$TEST_FS_TYPE" ;;
+            *4) [ -z "$TEST_SWAP_TYPE" ] || echo "$TEST_SWAP_TYPE" ;;
+        esac
+        ;;
 esac
 STUB
-chmod 755 "$verify_tmp/stub/parted" "$verify_tmp/stub/partx" "$verify_tmp/stub/mkfs.ext4" "$verify_tmp/stub/blkid"
+chmod 755 "$verify_tmp/stub/parted" "$verify_tmp/stub/partx" "$verify_tmp/stub/mkfs.ext4" \
+    "$verify_tmp/stub/mkswap" "$verify_tmp/stub/blkid"
 # fake_disk DISK SECTORS [NUMBER:START:SIZE:PARTNAME]...
 fake_disk() {
     fake_name=$1
@@ -526,13 +538,14 @@ EOF
         ln -s "/sys/block/$fake_name/$dev" "/sys/class/block/$dev"
     done
 }
-# data_partition DISK [DATA_LABEL_ELSEWHERE] [FS_TYPE_OF_PARTITION_3] [MKPART_FAILS]
+# data_partition DISK [DATA_LABEL_ELSEWHERE] [FS_TYPE_OF_PARTITION_3] [MKPART_FAILS_FOR_NAME] [TYPE_OF_PARTITION_4]
 data_partition() {
     : > "$verify_tmp/disk.calls"
-    rm -f "$verify_tmp/mkpart.start"
+    rm -f "$verify_tmp"/mkpart.*
     (
         export PATH="$verify_tmp/stub:$PATH" CALLS="$verify_tmp/disk.calls" STATE="$verify_tmp" \
-            TEST_DISK="$1" TEST_DATA_LABEL="${2:-}" TEST_FS_TYPE="${3:-}" TEST_MKPART_FAIL="${4:-}"
+            TEST_DISK="$1" TEST_DATA_LABEL="${2:-}" TEST_FS_TYPE="${3:-}" TEST_MKPART_FAIL="${4:-}" \
+            TEST_SWAP_TYPE="${5:-}"
         cd /etc/uci-defaults && . ./96-data-partition
     )
 }
@@ -544,37 +557,70 @@ disk_16g=33554432
 # shellcheck disable=SC2086 # the partition list is split on purpose
 {
     fake_disk nvme0n1 $disk_16g $image_partitions
-    data_partition nvme0n1 || fail 'data partition on a fresh NVMe disk failed'
+    data_partition nvme0n1 || fail 'partitions on a fresh NVMe disk failed'
+    assert_equal "parted -s -f /dev/nvme0n1 print
+parted -s /dev/nvme0n1 mkpart data ext4 8521728s 31455231s
+parted -s /dev/nvme0n1 mkpart swap linux-swap 31455232s 100%
+partx -a /dev/nvme0n1
+mkswap -L swap /dev/nvme0n1p4
+mkfs.ext4 -q -F -L data /dev/nvme0n1p3" "$(disk_calls)" 'commands on a fresh NVMe disk'
+    fake_disk sda $disk_16g $image_partitions
+    data_partition sda || fail 'partitions on a fresh SATA disk failed'
+    assert_equal 'mkswap -L swap /dev/sda4
+mkfs.ext4 -q -F -L data /dev/sda3' "$(disk_calls | tail -2)" 'formatted partitions on a SATA disk'
+    # Exactly 2 GiB free: 1 GiB of data, then the swap partition.
+    fake_disk nvme0n1 $((8521728 + 34 + 4194304)) $image_partitions
+    data_partition nvme0n1 || fail 'partitions on a disk with 2 GiB free failed'
+    assert_equal "parted -s /dev/nvme0n1 mkpart data ext4 8521728s 10618879s
+parted -s /dev/nvme0n1 mkpart swap linux-swap 10618880s 100%" "$(disk_calls | sed -n 2,3p)" 'commands with 2 GiB free'
+    # Between 1 and 2 GiB free: only the data partition, over all of it.
+    fake_disk nvme0n1 $((8521728 + 34 + 3145728)) $image_partitions
+    data_partition nvme0n1 || fail 'data partition on a disk with 1.5 GiB free failed'
     assert_equal "parted -s -f /dev/nvme0n1 print
 parted -s /dev/nvme0n1 mkpart data ext4 8521728s 100%
 partx -a /dev/nvme0n1
-mkfs.ext4 -q -F -L data /dev/nvme0n1p3" "$(disk_calls)" 'commands on a fresh NVMe disk'
-    fake_disk sda $disk_16g $image_partitions
-    data_partition sda || fail 'data partition on a fresh SATA disk failed'
-    assert_equal 'mkfs.ext4 -q -F -L data /dev/sda3' "$(disk_calls | tail -1)" 'formatted partition on a SATA disk'
+mkfs.ext4 -q -F -L data /dev/nvme0n1p3" "$(disk_calls)" 'commands with 1.5 GiB free'
     fake_disk nvme0n1 $disk_16g $image_partitions
     data_partition nvme0n1 yes
     assert_equal '' "$(disk_calls)" 'commands with a data filesystem on any disk'
     fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:1000000:mine
     data_partition nvme0n1
     assert_equal '' "$(disk_calls)" 'commands with another partition on the boot disk'
-    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:25030656:data
+    # Interrupted first boots.
+    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:22933504:data
     data_partition nvme0n1
-    assert_equal 'mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands after an interrupted first boot'
+    assert_equal 'mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands after an interrupted first boot with data only'
+    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:22933504:data 4:31455232:2099167:swap
+    data_partition nvme0n1
+    assert_equal 'mkswap -L swap /dev/nvme0n1p4
+mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands after an interrupted first boot with both'
+    data_partition nvme0n1 '' '' '' swap
+    assert_equal 'mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands with swap made and data not formatted'
+    fake_disk nvme0n1 $disk_16g $image_partitions 3:8521728:22933504:data 4:31455232:2099167:mine
+    data_partition nvme0n1
+    assert_equal 'mkfs.ext4 -q -F -L data /dev/nvme0n1p3' "$(disk_calls)" 'commands with another partition 4'
     data_partition nvme0n1 '' ext4
     assert_equal '' "$(disk_calls)" 'commands with a filesystem on the data partition'
     fake_disk nvme0n1 $((8521728 + 34 + 2097151)) $image_partitions
     data_partition nvme0n1
     assert_equal '' "$(disk_calls)" 'commands with less than 1 GiB free'
     fake_disk nvme0n1 $disk_16g $image_partitions
-    if data_partition nvme0n1 '' '' yes; then
-        fail 'data partition succeeded although mkpart failed'
+    if data_partition nvme0n1 '' '' data; then
+        fail 'partitions succeeded although the data mkpart failed'
     fi
-    assert_equal '' "$(disk_calls | grep mkfs || :)" 'formatting after a failed mkpart'
+    assert_equal "parted -s -f /dev/nvme0n1 print
+parted -s /dev/nvme0n1 mkpart data ext4 8521728s 31455231s" "$(disk_calls)" 'commands after a failed data mkpart'
+    # A failed swap mkpart stops before anything is formatted; the next boot
+    # finds the unformatted data partition and formats it.
+    fake_disk nvme0n1 $disk_16g $image_partitions
+    if data_partition nvme0n1 '' '' swap; then
+        fail 'partitions succeeded although the swap mkpart failed'
+    fi
+    assert_equal '' "$(disk_calls | grep -E 'mkfs|mkswap' || :)" 'formatting after a failed swap mkpart'
 }
 rm -rf /sys/block /sys/class/block
 cp "$verify_tmp/common.sh" /lib/upgrade/common.sh
-echo 'PASS: a freshly written boot disk gets an ext4 data partition over its free space; existing data and other partitions are never touched'
+echo 'PASS: a freshly written boot disk gets an ext4 data partition and, with room, a 1 GiB swap partition at the end; existing data and other partitions are never touched'
 # 14. Model name from DMI. The sysinfo preinit files are sourced in glob order
 # and their hooks run in that order, as /etc/preinit does, without set -e and
 # against a fake DMI directory.
@@ -684,5 +730,33 @@ apply_dnsmasq_upstream
 cmp -s "$verify_tmp/user.dhcp" /etc/config/dhcp || fail 'kept noresolv setting was changed'
 cp "$verify_tmp/dhcp" /etc/config/dhcp
 echo 'PASS: factory dnsmasq forwards to 223.5.5.5 and 119.29.29.29 and ignores the WAN servers; kept dnsmasq settings are unchanged'
+
+# 17. Swap partition in fstab, after the fstab block-mount generates first.
+apply_swap_mount() {
+    (cd /etc/uci-defaults && . ./98-swap-mount) || fail 'swap mount default failed'
+}
+swap_sections() {
+    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=swap$/\1/p'); do
+        echo "$section"
+    done
+}
+rm -f /etc/config/fstab
+(cd /etc/uci-defaults && . ./10-fstab)
+[ -f /etc/config/fstab ] || fail 'block-mount did not generate fstab'
+apply_swap_mount
+swap_section=$(swap_sections)
+assert_equal 1 "$(echo "$swap_section" | grep -c .)" 'number of swap sections'
+assert_equal swap "$(uci -q get "fstab.$swap_section.label")" 'swap label'
+assert_equal 1 "$(uci -q get "fstab.$swap_section.enabled")" 'swap enabled'
+cp /etc/config/fstab "$verify_tmp/swap.fstab"
+apply_swap_mount
+cmp -s "$verify_tmp/swap.fstab" /etc/config/fstab || fail 'repeated swap mount default changed fstab'
+# Kept settings: the swap section switched off in LuCI stays off.
+uci set "fstab.$swap_section.enabled=0"
+uci commit fstab
+cp /etc/config/fstab "$verify_tmp/user.fstab"
+apply_swap_mount
+cmp -s "$verify_tmp/user.fstab" /etc/config/fstab || fail 'kept swap section was changed'
+echo 'PASS: factory fstab switches on the partition labelled swap; kept swap settings are unchanged'
 echo 'PASS: rootfs userspace verification complete (no network activation or hardware boot test)'
 INNER

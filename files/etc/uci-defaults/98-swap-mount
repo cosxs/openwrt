@@ -1,0 +1,12 @@
+#!/bin/sh
+
+# Switch on the swap partition labelled "swap" at every boot. An fstab that
+# already has a swap section for that label, e.g. from kept settings, is left
+# unchanged.
+for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=swap$/\1/p'); do
+    [ "$(uci -q get "fstab.$section.label")" = swap ] && exit 0
+done
+uci add fstab swap > /dev/null
+uci set fstab.@swap[-1].label='swap'
+uci set fstab.@swap[-1].enabled='1'
+uci commit fstab

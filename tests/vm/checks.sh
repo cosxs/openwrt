@@ -85,7 +85,16 @@ check 'data mount fstype' ext4 "$(vm "awk '\$2 == \"/data\" {print \$3}' /proc/m
 # The disk was only written with the image; the firmware made the partition.
 check 'data partition made on first boot' 'data data ext4' "$(vm 'lsblk -no PARTLABEL,LABEL,FSTYPE /dev/nvme0n1p3' | xargs)"
 check 'data partition name in the partition table' data "$(vm 'blkid -p -o value -s PART_ENTRY_NAME /dev/nvme0n1p3')"
-check 'data partition reaches the end of the disk' yes "$(vm 'p=/sys/class/block/nvme0n1p3; [ $(($(cat $p/start) + $(cat $p/size))) -gt $(($(cat /sys/class/block/nvme0n1/size) - 4096)) ] && echo yes || echo no')"
+check 'data partition ends where the swap partition starts' yes "$(vm 'd=/sys/class/block/nvme0n1p3; s=/sys/class/block/nvme0n1p4; [ $(($(cat $s/start) - $(cat $d/start) - $(cat $d/size))) -ge 0 ] && [ $(($(cat $s/start) - $(cat $d/start) - $(cat $d/size))) -lt 4096 ] && echo yes || echo no')"
+check 'swap partition made on first boot' 'swap swap swap' "$(vm 'lsblk -no PARTLABEL,LABEL,FSTYPE /dev/nvme0n1p4' | xargs)"
+check 'swap partition name in the partition table' swap "$(vm 'blkid -p -o value -s PART_ENTRY_NAME /dev/nvme0n1p4')"
+check 'swap partition reaches the end of the disk' yes "$(vm 'p=/sys/class/block/nvme0n1p4; [ $(($(cat $p/start) + $(cat $p/size))) -gt $(($(cat /sys/class/block/nvme0n1/size) - 4096)) ] && echo yes || echo no')"
+check 'swap partition is 1 GiB' yes "$(vm 'sz=$(cat /sys/class/block/nvme0n1p4/size); [ $sz -ge 2097152 ] && [ $sz -lt 2101248 ] && echo yes || echo no')"
+check 'fstab swap section' 'swap 1' "$(vm 'echo $(uci -q get fstab.@swap[0].label) $(uci -q get fstab.@swap[0].enabled)')"
+check 'swap in use' '/dev/nvme0n1p4 partition' "$(vm "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
+check 'swap size over 1000000 KiB' yes "$(vm "awk 'NR == 2 {print (\$3 > 1000000 ? \"yes\" : \"no\")}' /proc/swaps")"
+check 'only one swap area' 1 "$(vm 'tail -n +2 /proc/swaps | wc -l')"
+vm 'free -m | sed -n 1,3p'
 vm 'dmesg | grep data-partition'
 check 'docker root/driver' '/data/docker overlayfs' "$(vm 'docker info --format "{{.DockerRootDir}} {{.Driver}}"' | sed 's|/ | |')"
 check 'data mount shared' yes "$(vm 'grep " /data " /proc/self/mountinfo | grep -q " shared:" && echo yes || echo no')"

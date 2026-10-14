@@ -15,7 +15,8 @@
 | DNS 上游 | dnsmasq 出厂只向 `223.5.5.5` 和 `119.29.29.29` 转发（`noresolv`），不使用 WAN 下发的 DNS。WAN 下发的 DNS 里可能有上游路由器的 IPv6 链路本地地址，路由器上的防火墙或隧道把 DNS 查询重定向到本机解析器时，这种地址的查询可能拦截不到。DHCP 仍把本机作为 LAN 的 DNS。保留配置升级沿用设备上的设置；在 LuCI“网络 → DHCP/DNS”中可改回 WAN 下发的 DNS（取消“忽略解析文件”并删去 DNS 转发） |
 | 引导分区 | 64 MiB（官方默认 16 MiB，内核和 GRUB 约占 6.3 MiB）。保留配置升级时，配置备份暂存在这个分区里，放大后可容纳更大的备份 |
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
-| 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；sysupgrade 和恢复出厂都不改动它 |
+| 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；剩余空间不少于 2 GiB 时，数据分区让出盘尾的 1 GiB 给下面的 swap 分区；sysupgrade 和恢复出厂都不改动它 |
+| Swap 分区 | 盘尾 1 GiB 的分区（分区名和卷标都是 `swap`），全新写盘后首次启动时与数据分区一起建好；`fstab` 里有一条按卷标 `swap` 启用的 swap 段，开机由系统自带的 `block mount` 启用。剩余空间不足 2 GiB 时不建，只有数据分区。已经建好数据分区的盘（保留配置升级、或旧版固件装的盘）不会补建 swap 分区，需要时见“写盘”手动创建。不需要 swap 时，在 LuCI“系统 → 挂载点”里停用它，或删去 fstab 的 swap 段；sysupgrade 和恢复出厂不改动这个分区 |
 | 软件 | LuCI（默认主题 Argon，另带官方 Bootstrap）、中文界面、Nikki 及 Mihomo stable 核心、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
 | Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）只监听 LAN 的 7681 端口，需 root 登录 |
 | LuCI 主题 | 默认第三方主题 Argon（固定版本和 SHA256），首次启动时由它自己的脚本设为默认。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的 Argon。没有安装 Argon 的配置插件，登录页使用主题自带的本地背景，不联网获取在线壁纸 |
@@ -85,8 +86,9 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/config/ddns`：上游包的配置文件，只保留 `global` 段，去掉 `myddns_ipv4`、`myddns_ipv6` 两条示例服务（服务商 dyndns.org 未安装，账号和域名都是占位文字）。DDNS 服务仍随系统启用，只运行在 LuCI 中启用的条目；它是包声明的 conffile，保留配置升级沿用设备上的版本。
 - `files/etc/config/sing-box`：上游包的配置文件，仅把 `enabled` 改为 `0`；它是包声明的 conffile，保留配置升级沿用设备上的版本。服务启用状态不用 `DISABLED_SERVICES` 控制，因为 sysupgrade 只保留“已禁用”的服务，设备上启用后会在升级时被关回去。
 - `files/etc/sysctl.d/90-tcp-tuning.conf`：路由器本机终结的 TCP 连接的调优，在 BBR 配置之后加载；设备上可用 `/etc/sysctl.conf` 覆盖。
-- `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区，条件见“写盘”。中途中断（已建分区、尚未格式化）时下次启动只补做格式化；已有文件系统的数据分区从不重新格式化。
+- `files/etc/uci-defaults/96-data-partition`：全新写盘后首次启动时创建数据分区和盘尾的 swap 分区，条件见“写盘”。分区建好后先把 swap 分区做成交换空间、最后才格式化数据分区：卷标 `data` 一出现，之后每次开机都直接跳过，所以中断的首次启动（已建分区、尚未格式化）下次启动会补做两者的格式化；已有文件系统的数据分区从不重新格式化。
 - `files/etc/uci-defaults/93-data-mount`：fstab 里还没有挂载卷标 `data` 的分区、也没有挂到 `/data` 的条目时，添加按卷标 `data` 挂载到 `/data` 的条目。
+- `files/etc/uci-defaults/98-swap-mount`：fstab 里还没有卷标为 `swap` 的 swap 段时，添加一条按卷标 `swap` 启用的 swap 段；设备上已有（例如在 LuCI 里停用过）的不改动。
 - `files/etc/uci-defaults/94-dockerd-defaults`：dockerd 配置仍是出厂版本时，把数据目录改到 `/data/docker/`，并让 WAN→docker0 的阻断规则只拦截新连接。OpenWrt 的根目录是 overlayfs，不能承载 Docker 的 overlay 存储，系统分区的可写层也会在每次 sysupgrade 时清空；dockerd 默认的阻断规则不区分连接状态，会把容器自己发起的连接的回包一并拒绝，容器因此无法上网。
 - `files/etc/init.d/dockerd-root-shared`：开机第 12 位运行（`fstab` 挂载之后、`dockerd` 之前），把 dockerd 数据目录所在的挂载点设为 shared 传播。dockerd 要求这个挂载点是 shared，OpenWrt 上的挂载都是 private，dockerd 就会把数据目录原地再挂一次并设为 shared；先设好就不会多出这个挂载，与其他用 systemd 的系统一致。数据目录还不存在时按最近的上级目录查找；数据目录在根文件系统上时不改动根文件系统。
 - `files/etc/uci-defaults/95-docker-firewall`：还没有 `docker` 防火墙区域时，按 dockerd 自身 `uciadd` 的命名预先建好 `docker` 接口、`docker0` 网桥和区域，并加上 docker→wan、lan→docker 转发。fw4 不放行没有 forwarding 的跨区流量，只靠 dockerd 建的区域，容器无法上网。
@@ -108,11 +110,11 @@ Nikki 归档校验固定 SHA256，只导入需要的 APK，不导入其原始签
 - 在其他系统里写盘（会覆盖整块盘）：`gzip -dc <镜像>.img.gz | dd of=/dev/nvme0n1 bs=4M conv=fsync`（SATA 盘一般是 `/dev/sda`）；
 - 或在已安装的 OpenWrt 上不保留配置升级：`sysupgrade -n -v <镜像文件或网址>`。分区布局与盘上不同（例如从其他固件换装）时会整盘写入，相同时只重写引导和系统分区，数据分区保留。
 
-首次启动时，`files/etc/uci-defaults/96-data-partition` 检查系统盘：只有固件自带的分区（1、2、128）、剩余空间至少 1 GiB、且任何盘上都没有卷标 `data` 的文件系统时，才把分区表的 GPT 备份头移到盘尾，用剩余空间建一个名为 `data` 的分区并格式化为 ext4（卷标 `data`），原先留在这片空间里的内容会被覆盖。随后按卷标挂载到 `/data`，Docker 使用其中的 `docker/` 目录。盘上已有其他分区时它不做任何改动，此时可手动创建：`parted -s -f /dev/nvme0n1 print`、`parted -s /dev/nvme0n1 mkpart data ext4 4161MiB 100%`、`partx -a /dev/nvme0n1`、`mkfs.ext4 -L data /dev/nvme0n1p3`（分区号以实际为准），然后重启。创建结果记录在内核日志中（`dmesg | grep data-partition`）。
+首次启动时，`files/etc/uci-defaults/96-data-partition` 检查系统盘：只有固件自带的分区（1、2、128）、剩余空间至少 1 GiB、且任何盘上都没有卷标 `data` 的文件系统时，才把分区表的 GPT 备份头移到盘尾，用剩余空间建一个名为 `data` 的分区并格式化为 ext4（卷标 `data`），原先留在这片空间里的内容会被覆盖。剩余空间不少于 2 GiB 时，盘尾的 1 GiB 先划给名为 `swap` 的分区（做成交换空间，卷标 `swap`），数据分区在它前面结束。随后按卷标挂载到 `/data`，Docker 使用其中的 `docker/` 目录，swap 分区由 `fstab` 启用。盘上已有其他分区时它不做任何改动，此时可手动创建，例如在 16 GiB 的盘上：`parted -s -f /dev/nvme0n1 print`、`parted -s /dev/nvme0n1 mkpart data ext4 4161MiB -1GiB`、`parted -s /dev/nvme0n1 mkpart swap linux-swap -1GiB 100%`、`partx -a /dev/nvme0n1`、`mkswap -L swap /dev/nvme0n1p4`、`mkfs.ext4 -L data /dev/nvme0n1p3`（分区号以实际为准），然后重启；只补建 swap 分区时，只需后三步里属于它的部分，并保证盘尾有未分配的 1 GiB。创建结果记录在内核日志中（`dmesg | grep data-partition`）。
 
 首次从目标盘启动或升级前，拔掉其他装有同版本 OpenWrt 的盘（例如测试用的 U 盘）：同一 ImageBuilder 版本构建的镜像磁盘 GUID 和分区 UUID 相同，内核按 `root=PARTUUID=` 查找系统分区，升级脚本也按磁盘 GUID 查找启动盘，可能用错盘。
 
-之后的保留配置升级只重写引导和系统分区，数据分区保持不变。
+之后的保留配置升级只重写引导和系统分区，数据分区和 swap 分区保持不变。
 
 ## 设备验收
 

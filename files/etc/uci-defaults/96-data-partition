@@ -1,21 +1,42 @@
 #!/bin/sh
 
-# Data partition for a freshly written disk. When the boot disk holds only the
-# image's partitions (1, 2 and 128) and at least 1 GiB beyond them, add a
-# partition named "data" over the rest of the disk and format it as ext4
-# labelled "data", overwriting whatever an earlier system left in that space;
-# 93-data-mount mounts the label at /data. A partition named "data" without a
-# filesystem, as an interrupted first boot leaves it, is formatted. Nothing
+# Data and swap partitions for a freshly written disk. When the boot disk holds
+# only the image's partitions (1, 2 and 128) and at least 1 GiB beyond them,
+# add a partition named "data" and format it as ext4 labelled "data",
+# overwriting whatever an earlier system left in that space. With at least
+# 2 GiB beyond them, the last GiB of the disk becomes a partition named "swap"
+# made into swap labelled "swap" and "data" ends before it. 93-data-mount and
+# 98-swap-mount make fstab use the labels. Unformatted partitions of these
+# names, as an interrupted first boot leaves them, are formatted. Nothing
 # changes while any disk holds a filesystem labelled "data" or the boot disk
-# holds another partition. Runs before fstab and dockerd start.
+# holds other partitions. Runs before fstab and dockerd start.
 
 # The system log starts later in boot; the kernel log keeps these messages.
 log() {
     echo "data-partition: $*" > /dev/kmsg
 }
-format() {
+format_data() {
     mkfs.ext4 -q -F -L data "/dev/$1" || { log "formatting /dev/$1 failed"; exit 1; }
     log "formatted /dev/$1 as ext4 labelled data"
+}
+format_swap() {
+    mkswap -L swap "/dev/$1" > /dev/null || { log "making swap on /dev/$1 failed"; exit 1; }
+    log "made /dev/$1 swap labelled swap"
+}
+# Whether the partition named $1 on device $2 holds no filesystem. The name is
+# read from the partition table: the kernel learns the name of a partition
+# added by partx only at the next boot.
+unformatted() {
+    [ "$(blkid -p -o value -s PART_ENTRY_NAME "/dev/$2")" = "$1" ] &&
+        [ -z "$(blkid -p -o value -s TYPE "/dev/$2")" ]
+}
+# Swap is formatted before data: the label "data" ends all later runs.
+finish() {
+    local swap_part='' data_part=''
+
+    export_partdevice swap_part 4 && unformatted swap "$swap_part" && format_swap "$swap_part"
+    export_partdevice data_part 3 && unformatted data "$data_part" && format_data "$data_part"
+    return 0
 }
 
 blkid -L data > /dev/null 2>&1 && exit 0
@@ -26,12 +47,8 @@ export_bootdevice && export_partdevice disk 0 || { log 'boot disk not found'; ex
 case "$(cat /sys/block/"$disk"/"$disk"*/partition 2> /dev/null | sort -n | xargs)" in
     '1 2 128')
         ;;
-    '1 2 3 128')
-        export_partdevice part 3 || exit 0
-        # Read from the partition table: the kernel learns the name of a
-        # partition added by partx only at the next boot.
-        [ "$(blkid -p -o value -s PART_ENTRY_NAME "/dev/$part")" = data ] &&
-            [ -z "$(blkid -p -o value -s TYPE "/dev/$part")" ] && format "$part"
+    '1 2 3 128' | '1 2 3 4 128')
+        finish
         exit 0
         ;;
     *)
@@ -39,27 +56,49 @@ case "$(cat /sys/block/"$disk"/"$disk"*/partition 2> /dev/null | sort -n | xargs
         ;;
 esac
 
+part=''
 export_partdevice part 2 || exit 0
 start=$(( ($(cat "/sys/class/block/$part/start") + $(cat "/sys/class/block/$part/size") + 2047) / 2048 * 2048 ))
+total=$(cat "/sys/block/$disk/size")
 # The backup GPT takes the last 33 sectors of the disk.
-if [ $(( $(cat "/sys/block/$disk/size") - 34 - start )) -lt 2097152 ]; then
+free=$(( total - 34 - start ))
+if [ "$free" -lt 2097152 ]; then
     log "less than 1 GiB free on /dev/$disk"
     exit 0
+fi
+# The swap partition starts at a multiple of 1 MiB and runs to the end.
+swap_start=''
+[ "$free" -lt 4194304 ] || swap_start=$(( (total - 33 - 2097152) / 2048 * 2048 ))
+data_end=100%
+data_end_text='the end'
+if [ -n "$swap_start" ]; then
+    data_end="$((swap_start - 1))s"
+    data_end_text="sector $((swap_start - 1))"
 fi
 # The first call moves the backup GPT from the end of the image to the end of
 # the disk.
 if ! parted -s -f "/dev/$disk" print > /dev/null ||
-        ! parted -s "/dev/$disk" mkpart data ext4 "${start}s" 100%; then
+        ! parted -s "/dev/$disk" mkpart data ext4 "${start}s" "$data_end"; then
     log "creating the data partition on /dev/$disk failed"
     exit 1
 fi
-# partx reports the partitions in use; only the new one is added.
+if [ -n "$swap_start" ] && ! parted -s "/dev/$disk" mkpart swap linux-swap "${swap_start}s" 100%; then
+    log "creating the swap partition on /dev/$disk failed"
+    exit 1
+fi
+# partx reports the partitions in use; only the new ones are added.
 partx -a "/dev/$disk" 2> /dev/null || :
 part=''
+swap_part=''
 for _ in 1 2 3 4 5 6 7 8 9 10; do
-    export_partdevice part 3 && break
+    export_partdevice part 3 && { [ -z "$swap_start" ] || export_partdevice swap_part 4; } && break
     sleep 1
 done
 [ -n "$part" ] || { log "new partition 3 on /dev/$disk did not appear"; exit 1; }
-log "created /dev/$part from sector $start to the end of /dev/$disk"
-format "$part"
+log "created /dev/$part from sector $start to $data_end_text of /dev/$disk"
+if [ -n "$swap_start" ]; then
+    [ -n "$swap_part" ] || { log "new partition 4 on /dev/$disk did not appear"; exit 1; }
+    log "created /dev/$swap_part from sector $swap_start to the end of /dev/$disk"
+    format_swap "$swap_part"
+fi
+format_data "$part"
