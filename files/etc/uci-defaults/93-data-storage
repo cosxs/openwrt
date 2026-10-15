@@ -1,0 +1,151 @@
+#!/bin/sh
+
+# Storage defaults: fstab entries and, on a freshly written disk, the swap and
+# data partitions they refer to.
+#
+# fstab: mount the partition labelled "data" at /data and switch on the swap
+# partition labelled "swap" at every boot. An fstab that already mounts that
+# label or something at /data, or has a swap section for that label, e.g. from
+# kept settings, is left unchanged. This part comes first and always runs, so
+# that the partition part below can end the script early.
+#
+# Partitions: when the boot disk holds only the image's partitions (1, 2 and
+# 128) and at least 1 GiB beyond them, the space becomes a partition named
+# "data", formatted as ext4 and labelled "data", overwriting whatever an
+# earlier system left there. With at least 2 GiB beyond them, the first GiB
+# becomes a partition named "swap", made into swap labelled "swap", and "data"
+# follows it and runs to the end of the disk, so it is the partition to grow on
+# a larger disk. Unformatted partitions of these names, as an interrupted first
+# boot leaves them, are formatted. Nothing changes while any disk holds a
+# filesystem labelled "data" or the boot disk holds other partitions. Runs
+# before fstab and dockerd start.
+
+mount_data() {
+    local section
+
+    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=mount$/\1/p'); do
+        [ "$(uci -q get "fstab.$section.target")" = /data ] && return
+        [ "$(uci -q get "fstab.$section.label")" = data ] && return
+    done
+    uci add fstab mount > /dev/null
+    uci set fstab.@mount[-1].target='/data'
+    uci set fstab.@mount[-1].label='data'
+    uci set fstab.@mount[-1].enabled='1'
+    uci commit fstab
+}
+enable_swap() {
+    local section
+
+    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=swap$/\1/p'); do
+        [ "$(uci -q get "fstab.$section.label")" = swap ] && return
+    done
+    uci add fstab swap > /dev/null
+    uci set fstab.@swap[-1].label='swap'
+    uci set fstab.@swap[-1].enabled='1'
+    uci commit fstab
+}
+mount_data
+enable_swap
+
+# The system log starts later in boot; the kernel log keeps these messages.
+log() {
+    echo "data-partition: $*" > /dev/kmsg
+}
+format_data() {
+    mkfs.ext4 -q -F -L data "/dev/$1" || { log "formatting /dev/$1 failed"; exit 1; }
+    log "formatted /dev/$1 as ext4 labelled data"
+}
+format_swap() {
+    mkswap -L swap "/dev/$1" > /dev/null || { log "making swap on /dev/$1 failed"; exit 1; }
+    log "made /dev/$1 swap labelled swap"
+}
+# Whether the partition named $1 on device $2 holds no filesystem. The name is
+# read from the partition table: the kernel learns the name of a partition
+# added by partx only at the next boot.
+unformatted() {
+    [ "$(blkid -p -o value -s PART_ENTRY_NAME "/dev/$2")" = "$1" ] &&
+        [ -z "$(blkid -p -o value -s TYPE "/dev/$2")" ]
+}
+# Swap is formatted before data: the label "data" ends all later runs.
+finish() {
+    local n part
+
+    for n in 3 4; do
+        part=''
+        export_partdevice part "$n" && unformatted swap "$part" && format_swap "$part"
+    done
+    for n in 3 4; do
+        part=''
+        export_partdevice part "$n" && unformatted data "$part" && format_data "$part"
+    done
+    return 0
+}
+
+blkid -L data > /dev/null 2>&1 && exit 0
+disk=''
+. /lib/upgrade/common.sh
+export_bootdevice && export_partdevice disk 0 || { log 'boot disk not found'; exit 0; }
+
+case "$(cat /sys/block/"$disk"/"$disk"*/partition 2> /dev/null | sort -n | xargs)" in
+    '1 2 128')
+        ;;
+    '1 2 3 128' | '1 2 3 4 128')
+        finish
+        exit 0
+        ;;
+    *)
+        exit 0
+        ;;
+esac
+
+part=''
+export_partdevice part 2 || exit 0
+start=$(( ($(cat "/sys/class/block/$part/start") + $(cat "/sys/class/block/$part/size") + 2047) / 2048 * 2048 ))
+total=$(cat "/sys/block/$disk/size")
+# The backup GPT takes the last 33 sectors of the disk.
+free=$(( total - 34 - start ))
+if [ "$free" -lt 2097152 ]; then
+    log "less than 1 GiB free on /dev/$disk"
+    exit 0
+fi
+# The swap partition is the first GiB; it starts and ends on 1 MiB boundaries,
+# like the data partition after it.
+data_start=$start
+swap=''
+if [ "$free" -ge 4194304 ]; then
+    swap=yes
+    data_start=$(( start + 2097152 ))
+fi
+# The first call moves the backup GPT from the end of the image to the end of
+# the disk.
+if ! parted -s -f "/dev/$disk" print > /dev/null; then
+    log "reading the partition table of /dev/$disk failed"
+    exit 1
+fi
+if [ -n "$swap" ] && ! parted -s "/dev/$disk" mkpart swap linux-swap "${start}s" "$((data_start - 1))s"; then
+    log "creating the swap partition on /dev/$disk failed"
+    exit 1
+fi
+if ! parted -s "/dev/$disk" mkpart data ext4 "${data_start}s" 100%; then
+    log "creating the data partition on /dev/$disk failed"
+    exit 1
+fi
+# partx reports the partitions in use; only the new ones are added.
+partx -a "/dev/$disk" 2> /dev/null || :
+swap_n=3
+data_n=3
+[ -z "$swap" ] || data_n=4
+swap_part=''
+data_part=''
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+    export_partdevice data_part "$data_n" && { [ -z "$swap" ] || export_partdevice swap_part "$swap_n"; } && break
+    sleep 1
+done
+[ -n "$data_part" ] || { log "new partition $data_n on /dev/$disk did not appear"; exit 1; }
+if [ -n "$swap" ]; then
+    [ -n "$swap_part" ] || { log "new partition $swap_n on /dev/$disk did not appear"; exit 1; }
+    log "created /dev/$swap_part from sector $start to $((data_start - 1)) of /dev/$disk"
+    format_swap "$swap_part"
+fi
+log "created /dev/$data_part from sector $data_start to the end of /dev/$disk"
+format_data "$data_part"
