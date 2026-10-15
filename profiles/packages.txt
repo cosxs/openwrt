@@ -8,3 +8,11 @@ luci-i18n-package-manager-zh-cn
 luci-ssl
 # BBR congestion control; the package also sets it as the default.
 kmod-tcp-bbr
+# Network diagnostics. mtr-json is the mtr build with JSON output, which
+# programs and pages can parse; it conflicts with mtr-nojson.
+mtr-json
+# Mount the data partition and manage disks.
+block-mount
+lsblk
+blkid
+parted
