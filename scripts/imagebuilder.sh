@@ -44,5 +44,13 @@ if [[ ${MANIFEST_ONLY:-} == 1 ]]; then
     exit
 fi
 
+# make image forwards only ROOTFS_PARTSIZE to the image build (it unsets
+# MAKEFLAGS); the boot partition size is read from .config.
+sed -i "s/^CONFIG_TARGET_KERNEL_PARTSIZE=.*/CONFIG_TARGET_KERNEL_PARTSIZE=$KERNEL_PARTSIZE/" .config
+grep -qx "CONFIG_TARGET_KERNEL_PARTSIZE=$KERNEL_PARTSIZE" .config
+
 make info
-make image PROFILE="$OPENWRT_PROFILE" PACKAGES="$packages"
+make image \
+    PROFILE="$OPENWRT_PROFILE" \
+    PACKAGES="$packages" \
+    ROOTFS_PARTSIZE="$ROOTFS_PARTSIZE"
