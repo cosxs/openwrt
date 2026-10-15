@@ -23,6 +23,7 @@ docker run --rm --platform linux/amd64 --user root --network none \
     --env "VERIFY_IMAGE=$image_name" \
     --env "OPENWRT_VERSION=$OPENWRT_VERSION" \
     --env "OPENWRT_TARGET=$OPENWRT_TARGET" \
+    --env "SINGBOX_VERSION=$SINGBOX_VERSION" \
     --env "MANIFEST=$(basename "${manifests[0]}")" \
     --mount "type=bind,source=$image_dir,target=/input,readonly" \
     "$IMAGEBUILDER_IMAGE" /bin/bash -euo pipefail -c '
@@ -42,4 +43,6 @@ docker run --rm --platform linux/amd64 --user root --network none \
         grep -E "^[^ ]+ - [^ ]+$" "/input/$MANIFEST" | LC_ALL=C sort > /tmp/manifest.txt
         diff /tmp/manifest.txt /tmp/installed.txt
         echo "PASS: the installed packages are exactly the resolved manifest"
+        grep -Eqx "sing-box - $SINGBOX_VERSION(-r[0-9]+)?" /tmp/installed.txt
+        echo "PASS: the installed sing-box is the pinned $SINGBOX_VERSION"
     ' 2>&1 | tee "$image_dir/verification.log"

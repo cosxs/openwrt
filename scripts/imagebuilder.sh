@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Runs inside the ImageBuilder container and builds the official profile with
-# its default packages plus profiles/packages.txt, and no overlay. With
+# its default packages plus profiles/packages.txt and the pinned upstream
+# packages, and no overlay. With
 # MANIFEST_ONLY=1, prints the resolved package manifest on stdout instead of
 # building the image.
 set -euo pipefail
@@ -14,6 +15,25 @@ if ! grep -q '^CONFIG_SIGNATURE_CHECK=y$' .config; then
     echo 'The official ImageBuilder must have signature checking enabled.' >&2
     exit 1
 fi
+
+mkdir -p packages
+
+# ImageBuilder generates and signs its own local index for these APK files.
+# apk finds local packages as <name>-<version>.apk, whatever the release asset
+# is called; both are read from the package metadata.
+import_apk() {
+    local file=$1 sha256=$2 name version
+    echo "$sha256  $file" | sha256sum --check --status
+    name=$(apk_field "$file" name)
+    version=$(apk_field "$file" version)
+    [[ -n $name && -n $version ]] || { echo "No package metadata in $file" >&2; exit 1; }
+    cp "$file" "packages/$name-$version.apk"
+}
+apk_field() {
+    staging_dir/host/bin/apk --allow-untrusted adbdump "$1" |
+        sed -n "/^info:/,/^[a-z]/s/^  $2: //p"
+}
+import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
 
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
     /work/profiles/packages.txt | tr '\n' ' ')

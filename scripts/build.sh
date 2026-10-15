@@ -18,7 +18,36 @@ profile_file="$project_dir/profiles/build.env"
 source "$profile_file"
 
 command -v docker >/dev/null || { echo 'Docker is required.' >&2; exit 1; }
+command -v curl >/dev/null || { echo 'curl is required.' >&2; exit 1; }
 docker info >/dev/null
+
+hash_file() {
+    if command -v sha256sum >/dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
+
+download_dir="$project_dir/.build/downloads"
+mkdir -p "$download_dir"
+
+# Download a pinned release asset once and verify it against its SHA256.
+fetch_verified() {
+    local url=$1 file=$2 sha256=$3
+    if [[ ! -f "$file" ]]; then
+        curl --fail --location --retry 3 "$url" -o "$file.part"
+        mv "$file.part" "$file"
+    fi
+    if [[ $(hash_file "$file") != "$sha256" ]]; then
+        echo "SHA256 mismatch: $file" >&2
+        exit 1
+    fi
+}
+
+fetch_verified "$SINGBOX_APK_URL" \
+    "$download_dir/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" \
+    "$SINGBOX_APK_SHA256"
 
 # fakeroot closes every possible descriptor on start; hosts whose containers
 # inherit an unlimited nofile limit would make that loop appear to hang.
@@ -36,9 +65,9 @@ run_id=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="$project_dir/artifacts/$OPENWRT_VERSION/$run_id"
 mkdir -p "$output_dir"
 cp "$profile_file" "$output_dir/build.env"
-printf 'recipe_revision=%s\n' \
+printf 'recipe_revision=%s\nsingbox_apk_sha256=%s\n' \
     "$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || printf uncommitted)" \
-    > "$output_dir/build-info.txt"
+    "$SINGBOX_APK_SHA256" > "$output_dir/build-info.txt"
 
 container_id=''
 cleanup() {

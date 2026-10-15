@@ -1,10 +1,13 @@
 #!/usr/bin/env bash
-# Move the pinned OpenWrt version in profiles/build.env to the newest point
-# release of the pinned series, together with its ImageBuilder digest.
+# Move the pinned build inputs in profiles/build.env to the latest upstream
+# releases: the newest OpenWrt point release of the pinned series with its
+# ImageBuilder digest, and sing-box. Each new asset is downloaded and hashed,
+# and checked against the digest GitHub publishes for it.
 #
-# Prints "KEY: old -> new" per change. A line starting with "notice:" needs a
-# person: a newer OpenWrt release series, which needs a manual review.
-# Needs curl and jq.
+# Prints "KEY: old -> new" per change. Lines starting with "notice:" need a
+# person: a newer OpenWrt release series, which needs a manual review, or an
+# asset replaced upstream without a new version, which stays pinned.
+# Needs curl and jq; GH_TOKEN, when set, authenticates GitHub API requests.
 set -euo pipefail
 
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -15,8 +18,46 @@ series=${OPENWRT_VERSION%.*}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
+hash_file() {
+    if command -v sha256sum > /dev/null; then
+        sha256sum "$1" | awk '{print $1}'
+    else
+        shasum -a 256 "$1" | awk '{print $1}'
+    fi
+}
 fetch() {
     curl --fail --silent --show-error --location --retry 3 "$@"
+}
+github_release() {
+    local auth=()
+    [[ -z ${GH_TOKEN:-} ]] || auth=(-H "Authorization: Bearer $GH_TOKEN")
+    fetch -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} \
+        "https://api.github.com/repos/$1/releases/latest"
+}
+asset_field() {
+    jq -r --arg n "$2" ".assets[] | select(.name == \$n) | $3 // empty" <<< "$1"
+}
+# Download a release asset, check the digest GitHub publishes for it when
+# there is one, and print its SHA256.
+fetch_asset() {
+    local release=$1 name=$2 url digest sha256
+    url=$(asset_field "$release" "$name" .browser_download_url)
+    [[ -n $url ]] || { echo "release asset $name not found" >&2; exit 1; }
+    fetch -o "$work/$name" "$url"
+    sha256=$(hash_file "$work/$name")
+    digest=$(asset_field "$release" "$name" .digest)
+    [[ -z $digest || $digest == "sha256:$sha256" ]] || {
+        echo "$name does not match its published digest $digest" >&2
+        exit 1
+    }
+    echo "$sha256"
+}
+# Report an asset whose published digest no longer matches the pin.
+check_unchanged() {
+    local release=$1 name=$2 pinned=$3 digest
+    digest=$(asset_field "$release" "$name" .digest)
+    [[ -z $digest || $digest == "sha256:$pinned" ]] ||
+        echo "notice: $name was replaced upstream without a new version; the pinned SHA256 is kept"
 }
 set_var() {
     local key=$1 value=$2 old
@@ -46,4 +87,18 @@ if [[ -n $latest && $latest != "$OPENWRT_VERSION" ]]; then
     else
         echo "OpenWrt $latest has no ImageBuilder image $tag yet; keeping $OPENWRT_VERSION"
     fi
+fi
+
+# sing-box OpenWrt APK.
+release=$(github_release SagerNet/sing-box)
+version=$(jq -r .tag_name <<< "$release")
+version=${version#v}
+asset="sing-box_${version}_openwrt_x86_64.apk"
+if [[ $version != "$SINGBOX_VERSION" ]]; then
+    sha256=$(fetch_asset "$release" "$asset")
+    set_var SINGBOX_VERSION "$version"
+    set_var SINGBOX_APK_URL "$(asset_field "$release" "$asset" .browser_download_url)"
+    set_var SINGBOX_APK_SHA256 "$sha256"
+else
+    check_unchanged "$release" "$asset" "$SINGBOX_APK_SHA256"
 fi

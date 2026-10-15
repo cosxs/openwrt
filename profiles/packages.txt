@@ -16,3 +16,7 @@ block-mount
 lsblk
 blkid
 parted
+# ImageBuilder rejects name=version here. The pinned local APK (upstream's
+# newest release) is newer than the official feed's sing-box; verify-image.sh
+# fails if another version is chosen.
+sing-box
