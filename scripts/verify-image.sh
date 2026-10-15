@@ -45,4 +45,21 @@ docker run --rm --platform linux/amd64 --user root --network none \
         echo "PASS: the installed packages are exactly the resolved manifest"
         grep -Eqx "sing-box - $SINGBOX_VERSION(-r[0-9]+)?" /tmp/installed.txt
         echo "PASS: the installed sing-box is the pinned $SINGBOX_VERSION"
+        script=/etc/uci-defaults/91-sing-box-default
+        test -x "/tmp/inspect-root$script"
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 1
+        # Run the default on a copy of the shipped state: /rom is not mounted here.
+        mkdir -p /tmp/inspect-root/rom/etc/sing-box /tmp/inspect-root/rom/etc/config
+        cp /tmp/inspect-root/etc/config/sing-box /tmp/inspect-root/rom/etc/config/sing-box
+        cp /tmp/inspect-root/etc/sing-box/config.json /tmp/inspect-root/rom/etc/sing-box/config.json
+        chroot /tmp/inspect-root /bin/sh "$script"
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 0
+        echo "PASS: sing-box ships enabled and the first-boot default turns it off"
+        # A device with its own configuration keeps its choice on a second run.
+        chroot /tmp/inspect-root /sbin/uci set sing-box.main.enabled=1
+        chroot /tmp/inspect-root /sbin/uci commit sing-box
+        echo "{}" > /tmp/inspect-root/etc/sing-box/config.json
+        chroot /tmp/inspect-root /bin/sh "$script"
+        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 1
+        echo "PASS: the default leaves a device that has its own sing-box setup alone"
     ' 2>&1 | tee "$image_dir/verification.log"

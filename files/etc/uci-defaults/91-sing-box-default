@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# The upstream sing-box package ships /etc/config/sing-box enabled, with the
+# placeholder /etc/sing-box/config.json. Turn it off on a fresh system, so it
+# only runs once someone has put their own configuration in place and enabled
+# it. A keep-settings upgrade runs this script again, so it does nothing when
+# either file differs from the shipped one: the device's own choices stay.
+cmp -s /etc/config/sing-box /rom/etc/config/sing-box || exit 0
+cmp -s /etc/sing-box/config.json /rom/etc/sing-box/config.json || exit 0
+uci set sing-box.main.enabled='0'
+uci commit sing-box

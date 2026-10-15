@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the ImageBuilder container and builds the official profile with
 # its default packages plus profiles/packages.txt and the pinned upstream
-# packages, and no overlay. With
-# MANIFEST_ONLY=1, prints the resolved package manifest on stdout instead of
-# building the image.
+# packages, with the overlay in files/. With MANIFEST_ONLY=1, prints the
+# resolved package manifest on stdout instead of building the image.
 set -euo pipefail
 
 cd /builder
@@ -53,4 +52,5 @@ make info
 make image \
     PROFILE="$OPENWRT_PROFILE" \
     PACKAGES="$packages" \
+    FILES=/work/files \
     ROOTFS_PARTSIZE="$ROOTFS_PARTSIZE"
