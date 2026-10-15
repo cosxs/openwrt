@@ -38,6 +38,9 @@ check tcp_mtu_probing 1 "$(vm 'sysctl -n net.ipv4.tcp_mtu_probing')"
 check tcp_notsent_lowat 4096 "$(vm 'sysctl -n net.ipv4.tcp_notsent_lowat')"
 check netdev_max_backlog 4000 "$(vm 'sysctl -n net.core.netdev_max_backlog')"
 check flow_offloading 1 "$(vm 'uci -q get firewall.@defaults[0].flow_offloading')"
+check synflood_protect 0 "$(vm 'uci -q get firewall.@defaults[0].synflood_protect')"
+# sing-box redirects the LAN's TCP to the router, so the input chain must not rate-limit SYNs.
+check 'no SYN rate limit on the input chain' 0 "$(vm 'nft list chain inet fw4 input | grep -c syn_flood')"
 vm 'nft list flowtables 2>&1 | grep -E "flowtable|devices" | sed "s/^[[:space:]]*//"'
 vm 'sysctl net.bridge.bridge-nf-call-iptables 2>&1'
 

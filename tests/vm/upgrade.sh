@@ -10,7 +10,7 @@ wait_for_router 300 || exit 1
 
 echo "== 升级前：修改设置并写入标记"
 vm 'uci set system.@system[0].hostname=kept-host && uci commit system'
-vm 'uci set firewall.@defaults[0].flow_offloading=0 && uci commit firewall'
+vm 'uci set firewall.@defaults[0].flow_offloading=0 && uci set firewall.@defaults[0].synflood_protect=1 && uci commit firewall'
 vm 'echo kept > /data/marker'
 images_before=$(vm 'docker images --format "{{.Repository}}:{{.Tag}}" | sort | xargs')
 echo "docker images before: $images_before"
@@ -39,6 +39,7 @@ check 'uploaded image gone from /tmp' gone "$(vm '[ -e /tmp/fw.img.gz ] && echo 
 check 'hostname kept' kept-host "$(vm 'uci -q get system.@system[0].hostname')"
 check 'zonename kept' Asia/Shanghai "$(vm 'uci -q get system.@system[0].zonename')"
 check 'flow offloading kept off' 0 "$(vm 'uci -q get firewall.@defaults[0].flow_offloading')"
+check 'SYN-flood protection kept on' 1 "$(vm 'uci -q get firewall.@defaults[0].synflood_protect')"
 check 'WAN admin rule kept' rule "$(vm 'uci -q get firewall.wan_private_admin')"
 check 'SSH from WAN side' ok "$(sshpass -e ssh -n -q -p 2222 -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null -o ConnectTimeout=20 root@127.0.0.1 'echo ok' 2> /dev/null)"
 check 'LAN address kept' 192.168.72.1/24 "$(vm 'ip -4 -o addr show br-lan' | awk '{print $4}')"

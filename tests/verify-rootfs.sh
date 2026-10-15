@@ -243,7 +243,7 @@ apply_firewall_defaults() {
     (cd /etc/uci-defaults && . ./92-firewall-defaults) || fail 'firewall defaults failed'
 }
 firewall_without_defaults() {
-    uci -q show firewall | grep -v -e '\.flow_offloading=' \
+    uci -q show firewall | grep -v -e '\.flow_offloading=' -e '\.synflood_protect=' \
         -e '^firewall\.wan_private_admin[.=]' -e '^firewall\.wan_admin_subnet[.=]'
 }
 uci_values() {
@@ -253,10 +253,12 @@ mkdir -p /rom/etc/config
 cp "$verify_tmp/firewall" /rom/etc/config/firewall
 cp "$verify_tmp/firewall" /etc/config/firewall
 assert_equal '' "$(uci -q get firewall.@defaults[0].flow_offloading || :)" 'shipped flow offloading'
+assert_equal '' "$(uci -q get firewall.@defaults[0].synflood_protect || :)" 'shipped SYN-flood protection'
 assert_equal '' "$(uci -q get firewall.wan_private_admin || :)" 'shipped WAN admin rule'
 firewall_without_defaults > "$verify_tmp/firewall.show"
 apply_firewall_defaults
 assert_equal 1 "$(uci -q get firewall.@defaults[0].flow_offloading)" 'factory flow offloading'
+assert_equal 0 "$(uci -q get firewall.@defaults[0].synflood_protect)" 'factory SYN-flood protection'
 assert_equal 'ipset|wan_admin_subnet|ipv4|src_net|/etc/wan-admin-subnet|' \
     "$(uci_values firewall.wan_admin_subnet firewall.wan_admin_subnet.name \
         firewall.wan_admin_subnet.family firewall.wan_admin_subnet.match \

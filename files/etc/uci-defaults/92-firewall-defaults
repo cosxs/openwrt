@@ -4,6 +4,10 @@
 # shipped one; a firewall restored from kept settings keeps its own choices.
 # This runs before package scripts add their firewall includes on first boot.
 # - Software flow offloading.
+# - No SYN rate limit (fw4's syn_flood chain: 25 SYN/s, burst 50). sing-box
+#   redirects the LAN's TCP to a local port, so every new proxied connection
+#   arrives on the input chain, and bursts of new connections timed out and
+#   were retransmitted. The WAN only admits the private subnet anyway.
 # - SSH, the web interface and the web terminal (ttyd) from the WAN's own
 #   subnet, the upstream home network. The hotplug script
 #   30-wan-admin-subnet fills the set only while that subnet is private IPv4,
@@ -11,6 +15,7 @@
 #   public IPv6 address that must stay closed.
 cmp -s /etc/config/firewall /rom/etc/config/firewall || exit 0
 uci set firewall.@defaults[0].flow_offloading='1'
+uci set firewall.@defaults[0].synflood_protect='0'
 
 uci set firewall.wan_admin_subnet=ipset
 uci set firewall.wan_admin_subnet.name='wan_admin_subnet'

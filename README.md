@@ -8,7 +8,7 @@
 | WAN | Linux `eth0`，DHCP 客户端；IPv6 跟随 WAN |
 | LAN | 首次启动时识别到的 `eth0` 以外所有 `ethN`，按编号顺序加入 `br-lan`。只有一个网口时不建 LAN：`eth0` 仍作为 WAN 从上游取得地址，在上游内网里可通过 WAN 侧管理访问，不会在已有网络上多出一个 DHCP 服务器 |
 | 管理地址 | `192.168.72.1/24`，DHCP 沿用官方默认值 |
-| 网络加速 | BBR（`kmod-tcp-bbr`）；本机 TCP 缓冲区等调优；软件流量分载出厂开启，保留配置升级沿用设备上的设置 |
+| 网络加速 | BBR（`kmod-tcp-bbr`）；本机 TCP 缓冲区等调优；软件流量分载出厂开启；fw4 的 SYN 速率限制（`synflood_protect`，每秒 25 个、突发 50）出厂关闭：sing-box 把局域网的 TCP 重定向到本机端口，新连接都落在 input 链上，开着限速时一次打开很多连接会有一部分 SYN 被丢弃、靠重传才能建立。保留配置升级沿用设备上的设置 |
 | WAN 侧管理 | 出厂允许来自 WAN 口当前所在网段的 SSH（22）、网页管理（80）和网页终端（7681），且只在该网段属于内网 IPv4 时生效：在任意品牌的家用路由器后面时只放行上游局域网；WAN 拿到公网地址、PPPoE 点对点地址或断开时不放行任何来源。IPv6 仍全部拒绝。保留配置升级沿用设备上的防火墙设置 |
 | 初始密码 | `root` / `159357`，仅在 root 无密码时于首次启动设置；保留配置升级沿用设备上的密码。仓库和固件都是公开的，加上 WAN 侧管理默认对上游内网开放，首次登录后应立即修改 |
 | 主机名 / 时区 | `OpenWrt`（上游默认）/ `Asia/Shanghai`（`CST-8`）；保留配置升级沿用设备上的设置 |
@@ -50,7 +50,7 @@
 ./scripts/verify-image.sh artifacts/<版本>/<时间>/*-squashfs-rootfs.img.gz
 ```
 
-检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置、开机时把 Docker 数据目录所在的挂载点设为 shared（根文件系统除外），Footstrap 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、UPnP 默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
+检查会在隔离容器中提取实际文件系统，验证首次生成、重复执行、保留配置、恢复默认的端口布局与管理地址，初始 root 密码只在无密码时写入，主机名和时区只用于新生成的系统配置，流量分载、SYN 速率限制关闭和 WAN 侧管理规则只用于出厂防火墙配置、管理网段只跟随内网 WAN 网段，数据分区挂载和 Docker 数据目录只用于新配置、开机时把 Docker 数据目录所在的挂载点设为 shared（根文件系统除外），Footstrap 为固定版本的默认 LuCI 主题且设备上的选择会保留，DMI 系统字段为 `Default` 时型号取主板字段，以及 BBR 为默认拥塞控制、sing-box 为固定版本且默认关闭、UPnP 默认关闭、Docker 可执行。它不启动设备网络，也不替代实机启动验证。
 
 `tests/vm/` 在 QEMU 虚拟机里测试完整磁盘镜像（需要 root、`qemu-system-x86`、`ovmf`、`sshpass`、`busybox`、`miniupnpc`，有 KVM 时自动使用）：
 
@@ -79,7 +79,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 - `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址和时区。
 - `files/etc/uci-defaults/90-initial-root-password`：初始 root 密码，只保存 SHA-512 crypt 哈希。
 - `files/etc/uci-defaults/91-zonename`：为新生成的时区补上 LuCI 使用的时区名。
-- `files/etc/uci-defaults/92-firewall-defaults`：防火墙仍是出厂配置时，开启软件流量分载，并加入地址集合 `wan_admin_subnet`（从 `/etc/wan-admin-subnet` 加载）和引用它的 `wan_private_admin` 规则（仅 IPv4：WAN 口可能同时有公网 IPv6 地址，不能对 IPv6 开放）。
+- `files/etc/uci-defaults/92-firewall-defaults`：防火墙仍是出厂配置时，开启软件流量分载、关闭 SYN 速率限制，并加入地址集合 `wan_admin_subnet`（从 `/etc/wan-admin-subnet` 加载）和引用它的 `wan_private_admin` 规则（仅 IPv4：WAN 口可能同时有公网 IPv6 地址，不能对 IPv6 开放）。
 - `files/etc/uci-defaults/29-luci-default-theme`：luci 配置仍是出厂版本时，把默认主题设为 Footstrap。名字排在两个主题包的 `30_luci-theme-*` 之前：它们只注册主题，遇到已有的 `mediaurlbase` 不改动，出厂配置里这一项是 Bootstrap。保留配置升级时 luci 配置已和出厂版本不同，沿用设备上的选择。
 - `files/etc/hotplug.d/iface/30-wan-admin-subnet`：WAN 连上或地址变化时计算当前网段，只有内网 IPv4 且前缀在 /8–/30 之间才写入 `/etc/wan-admin-subnet`，否则写空；内容变化时执行 `fw4 reload-sets`。直接按“WAN 当前网段”放行并不安全：光猫桥接后用 DHCP/IPoE 拿到公网地址时，当前网段就是运营商的公网网段。
 - `files/etc/wan-admin-subnet`：上述地址文件的出厂版本（空）。放在 `/etc` 而不是 `/var/run`，是为了防火墙在网络启动前加载时文件一定存在。
