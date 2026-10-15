@@ -25,3 +25,11 @@ check 'ping the LAN address' ok "$(lan ping -c 3 -W 2 "$LAN_ROUTER" > /dev/null 
 check 'SSH port from the LAN' open "$(tcp_open 22)"
 check 'LuCI over HTTP' open "$(tcp_open 80)"
 check 'LuCI over HTTPS' open "$(tcp_open 443)"
+
+echo "== 存储与服务（串口控制台）"
+check '/data mounted from the data partition' '/dev/nvme0n1p4 ext4' \
+    "$(console "awk '\$2 == \"/data\" {print \$1, \$3}' /proc/mounts")"
+check 'swap in use' '/dev/nvme0n1p3 partition' \
+    "$(console "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
+check 'sing-box enabled in UCI' 0 "$(console 'uci -q get sing-box.main.enabled')"
+check 'sing-box running' no "$(console 'pidof sing-box > /dev/null && echo yes || echo no')"

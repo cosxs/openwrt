@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# VM test of a combined EFI image, as root: fresh install and first-boot
-# checks. Copies the serial console log to the optional log directory and
+# VM test of a combined EFI image, as root: fresh install, first-boot checks
+# and a look at the disk afterwards. Copies the serial console log to the optional log directory and
 # exits non-zero when any check fails.
 # Usage: sudo tests/vm/run.sh path/to/*-squashfs-combined-efi.img.gz [log-dir]
 set -uo pipefail
@@ -32,6 +32,9 @@ echo "##### 全新写盘并启动"
 "$VM_DIR/start.sh" || exit 1
 echo "##### 首次启动检查"
 "$VM_DIR/checks.sh" 600
+echo "##### 磁盘检查（虚拟机已停止）"
+stop_vm
+"$VM_DIR/disk.sh"
 
 if [ -s "$VM_WORK/failures" ]; then
     echo "VM test failed:"

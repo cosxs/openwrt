@@ -25,7 +25,7 @@ else
     # shellcheck disable=SC2054 # the commas belong to the QEMU option
     accel=(-accel tcg,thread=multi -cpu max)
 fi
-rm -f "$VM_WORK/serial.log"
+rm -f "$VM_WORK/serial.log" "$VM_WORK/console.sock"
 qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,file="$VM_WORK/ovmf_vars.fd" \
@@ -35,6 +35,8 @@ qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \
     -device e1000e,netdev=lan,mac=52:54:00:00:00:11 \
     -netdev user,id=wan \
     -device e1000e,netdev=wan,mac=52:54:00:00:00:10 \
-    -display none -serial file:"$VM_WORK/serial.log" \
+    -display none \
+    -chardev socket,id=console,path="$VM_WORK/console.sock",server=on,wait=off,logfile="$VM_WORK/serial.log" \
+    -serial chardev:console \
     -daemonize -pidfile "$VM_WORK/qemu.pid"
 echo "qemu pid $(cat "$VM_WORK/qemu.pid") (${accel[1]%%,*})"
