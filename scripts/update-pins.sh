@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Move the pinned build inputs in profiles/ to the latest upstream releases:
 # the newest OpenWrt point release of the pinned series with its ImageBuilder
-# digest and sing-box. Each new asset is downloaded and hashed, and checked
+# digest, sing-box and nexttrace. Each new asset is downloaded and hashed, and checked
 # against the digest GitHub publishes for it.
 #
 # Prints "KEY: old -> new" per change. Lines starting with "notice:" need a
@@ -102,4 +102,18 @@ if [[ $version != "$SINGBOX_VERSION" ]]; then
     set_var SINGBOX_APK_SHA256 "$sha256"
 else
     check_unchanged "$release" "$asset" "$SINGBOX_APK_SHA256"
+fi
+
+# NextTrace full-flavor binary.
+release=$(github_release nxtrace/NTrace-core)
+version=$(jq -r .tag_name <<< "$release")
+version=${version#v}
+asset=nexttrace_linux_amd64
+if [[ $version != "$NEXTTRACE_VERSION" ]]; then
+    sha256=$(fetch_asset "$release" "$asset")
+    set_var NEXTTRACE_VERSION "$version"
+    set_var NEXTTRACE_URL "$(asset_field "$release" "$asset" .browser_download_url)"
+    set_var NEXTTRACE_SHA256 "$sha256"
+else
+    check_unchanged "$release" "$asset" "$NEXTTRACE_SHA256"
 fi

@@ -35,3 +35,6 @@ lsblk
 blkid
 parted
 
+# Network diagnostics: path tracing and throughput measurement.
+mtr
+iperf3

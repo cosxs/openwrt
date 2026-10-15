@@ -17,7 +17,7 @@
 | 系统分区 | 4096 MiB。建好数据分区后，引导分区和系统分区的大小都不要再改：分区布局变化会让 sysupgrade 整盘写入，数据分区随之丢失 |
 | 数据分区 | 全新写盘后首次启动时，自动用系统盘的剩余空间建分区（分区名和卷标都是 `data`，ext4），挂载到 `/data`（见“写盘”）；剩余空间不少于 2 GiB 时，数据分区让出盘尾的 1 GiB 给下面的 swap 分区；sysupgrade 和恢复出厂都不改动它 |
 | Swap 分区 | 盘尾 1 GiB 的分区（分区名和卷标都是 `swap`），全新写盘后首次启动时与数据分区一起建好；`fstab` 里有一条按卷标 `swap` 启用的 swap 段，开机由系统自带的 `block mount` 启用。剩余空间不足 2 GiB 时不建，只有数据分区。已经建好数据分区的盘（保留配置升级、或旧版固件装的盘）不会补建 swap 分区，需要时见“写盘”手动创建。不需要 swap 时，在 LuCI“系统 → 挂载点”里停用它，或删去 fstab 的 swap 段；sysupgrade 和恢复出厂不改动这个分区 |
-| 软件 | LuCI（默认主题 Footstrap，另带官方 Bootstrap）、中文界面、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面、UPnP IGD 和 NAT-PMP 端口映射（官方 `miniupnpd-nftables`）及其 LuCI 页面。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
+| 软件 | LuCI（默认主题 Footstrap，另带官方 Bootstrap）、中文界面、sing-box、Docker/Compose（官方源）及其 LuCI 页面、网页终端 ttyd 及其 LuCI 页面、DDNS（官方 `ddns-scripts`，仅 Cloudflare）及其 LuCI 页面、UPnP IGD 和 NAT-PMP 端口映射（官方 `miniupnpd-nftables`）及其 LuCI 页面、网络诊断工具 `mtr`、`iperf3` 和 `nexttrace`（官方完整版二进制，带 IP 归属地标注）。官方源以外的软件固定版本和 SHA256，见 `profiles/build.env`；每个 Release 附带实际安装的包清单 |
 | Docker | 数据目录 `/data/docker/`；随系统启动。开机时先把数据目录所在的挂载点（`/data`）设为 shared 传播，dockerd 就不再把数据目录原地重复挂载，LuCI“存储”里不会多出一行 `/data/docker`。出厂即有 `docker` 防火墙区域及 docker→wan（容器上网）、lan→docker（局域网访问容器和映射端口）转发；容器不能主动访问局域网其他设备。`-p` 映射的端口只能从局域网访问；要对外提供服务，容器改用 host 网络（`network_mode: host`），再在 LuCI“网络 → 防火墙 → 通信规则”中放行端口（源区域 `wan`，目标区域“设备（输入）”）。LuCI 容器管理依赖的网页终端 `ttyd`（LuCI“服务 → 终端”）监听所有地址的 7681 端口，需 root 登录；WAN 侧只对上游内网放行（见“WAN 侧管理”） |
 | LuCI 主题 | 默认主题 [Footstrap](https://github.com/VizzleTF/luci-theme-footstrap)，用官方 luci 软件源里的 `luci-theme-footstrap`（只依赖 `luci-base`，版本随官方源，不单独固定）。出厂时由 `29-luci-default-theme` 设为默认：luci 的出厂配置本来就写着 Bootstrap，两个主题包自带的首次启动脚本都不会改动已有的选择。官方 Bootstrap 也已安装，可在“系统 → 系统 → 语言和界面”中切换，保留配置升级沿用设备上的选择；设备上另装的主题被升级移除后，LuCI 退回最先注册的主题。Footstrap 不联网获取壁纸或字体；它自带的设置项没有中文翻译（上游只提供 es、ru），固件不安装这两个语言包 |
 | sing-box 初始状态 | 出厂关闭（上游包默认启用并带一个公开密码的示例服务端）；先替换 `/etc/sing-box/config.json`，再把 `sing-box.main.enabled` 设为 `1`。审核过的配置模板、部署步骤和各字段说明见 [`docs/sing-box/`](docs/sing-box/README.md) |
@@ -65,7 +65,7 @@ sudo tests/vm/run.sh artifacts/<版本>/<时间>/*-squashfs-combined-efi.img.gz
 GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
 - 触发：每天北京时间 03:37 定时运行，以及在 Actions 页面手动运行（可选“强制构建”）。推送代码不会触发构建，配方的改动在下一次定时或手动运行时构建发布。
-- 每次运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest 和 sing-box。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
+- 每次运行先执行 `scripts/update-pins.sh`，把固定的上游版本更新到最新：同一 OpenWrt 系列（25.12.x）的最新小版本及其 ImageBuilder digest、sing-box 和 nexttrace。新资产都会下载并计算 SHA256，与 GitHub 公布的摘要核对。出现更新的 OpenWrt 大版本系列，或上游在版本号不变的情况下替换了文件时，不自动更改，而是开一个 issue 提醒。
 - 然后只解析软件包（`build.sh --manifest-only`），由 `scripts/build-state.sh` 计算配方文件和包清单的状态，与最近一次 Release 附带的 `build-state.txt` 比较；没有变化就结束，不构建。官方软件源里的包更新也会体现在包清单里。
 - 有变化时构建，依次运行镜像检查和虚拟机测试（GitHub 的 Linux runner 支持 KVM）。全部通过后由 `scripts/release.sh` 发布：先把更新后的固定版本提交并推送到 `main`，再创建 Release，附带磁盘镜像、包清单、构建信息、`build-state.txt`、检查日志和 `SHA256SUMS`，说明里列出配方更新和相对上一个 Release 的软件包版本变化。任何一步失败都不提交、不发布，GitHub 会发邮件通知。
 - 不会自动刷机：刷机仍按“写盘”或保留配置的 sysupgrade 手动进行。
@@ -73,7 +73,7 @@ GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）：
 
 ## 配方
 
-- `profiles/build.env`：官方版本、容器 digest、分区大小，以及 sing-box APK 的来源/摘要。
+- `profiles/build.env`：官方版本、容器 digest、分区大小，以及 sing-box APK、nexttrace 二进制的来源/摘要。
 - `profiles/packages.txt`：在官方 generic 默认包基础上增加的软件。
 - `files/lib/preinit/01_sysinfo_dmi_default`：开机早期在上游 x86 的 `01_sysinfo` 之后运行。有些主板 BIOS 把 DMI 的系统厂商或产品型号填成单独的 `Default`，上游脚本不把它当占位词，LuCI 就会显示型号 `Default Default`；这时改用主板厂商和主板型号（与上游对 `Default string` 等占位词的处理相同），主板字段也是占位词时保留上游结果。
 - `files/etc/board.d/03-defaults`：LAN/WAN 出厂默认布局、管理地址和时区。

@@ -32,6 +32,14 @@ apk_field() {
 }
 import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
 
+# /work is read-only, so the overlay is a copy of files/ plus the pinned
+# nexttrace binary (a static Go executable; the release publishes no package).
+nexttrace_file="/work/.build/downloads/nexttrace_${NEXTTRACE_VERSION}_linux_amd64"
+echo "$NEXTTRACE_SHA256  $nexttrace_file" | sha256sum --check --status
+overlay=$(mktemp -d)
+cp -a /work/files/. "$overlay/"
+install -D -m 0755 "$nexttrace_file" "$overlay/usr/bin/nexttrace"
+
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
     /work/profiles/packages.txt | tr '\n' ' ')
 
@@ -58,5 +66,5 @@ make info
 make image \
     PROFILE="$OPENWRT_PROFILE" \
     PACKAGES="$packages" \
-    FILES=/work/files \
+    FILES="$overlay" \
     ROOTFS_PARTSIZE="$ROOTFS_PARTSIZE"

@@ -13,6 +13,7 @@ image_name=$(basename "$1")
 docker run --rm --platform linux/amd64 --user root --network none \
     --env "VERIFY_IMAGE=$image_name" \
     --env "SINGBOX_VERSION=$SINGBOX_VERSION" \
+    --env "NEXTTRACE_VERSION=$NEXTTRACE_VERSION" \
     --mount "type=bind,source=$image_dir,target=/input,readonly" \
     --mount "type=bind,source=$project_dir,target=/work,readonly" \
     "$IMAGEBUILDER_IMAGE" /bin/bash -euo pipefail -c '
@@ -63,6 +64,13 @@ docker run --rm --platform linux/amd64 --user root --network none \
         test "$(chroot /tmp/inspect-root /sbin/uci -q get upnpd.config.enabled)" = 0
         test -f /tmp/inspect-root/usr/share/luci/menu.d/luci-app-upnp.json
         echo "PASS: actual image contains disabled miniupnpd for nftables and its LuCI page"
+        test -x /tmp/inspect-root/usr/sbin/mtr
+        test -x /tmp/inspect-root/usr/sbin/mtr-packet
+        test -x /tmp/inspect-root/usr/bin/iperf3
+        echo "PASS: actual image contains mtr and iperf3"
+        test -x /tmp/inspect-root/usr/bin/nexttrace
+        chroot /tmp/inspect-root /usr/bin/nexttrace --version | grep -q "$NEXTTRACE_VERSION"
+        echo "PASS: actual image contains nexttrace $NEXTTRACE_VERSION"
         grep -qx "P:luci-theme-footstrap" /tmp/inspect-root/lib/apk/db/installed
         test -f /tmp/inspect-root/www/luci-static/footstrap/cascade.css
         echo "PASS: actual image contains the Footstrap LuCI theme from the official feed"
