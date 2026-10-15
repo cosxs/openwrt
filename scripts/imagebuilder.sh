@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Runs inside the ImageBuilder container and builds the official profile with
-# its default packages and no overlay. With MANIFEST_ONLY=1, prints the
-# resolved package manifest on stdout instead of building the image.
+# its default packages plus profiles/packages.txt, and no overlay. With
+# MANIFEST_ONLY=1, prints the resolved package manifest on stdout instead of
+# building the image.
 set -euo pipefail
 
 cd /builder
@@ -14,10 +15,14 @@ if ! grep -q '^CONFIG_SIGNATURE_CHECK=y$' .config; then
     exit 1
 fi
 
+packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
+    /work/profiles/packages.txt | tr '\n' ' ')
+
 if [[ ${MANIFEST_ONLY:-} == 1 ]]; then
-    make manifest PROFILE="$OPENWRT_PROFILE" | grep -E '^[^ ]+ - [^ ]+$'
+    make manifest PROFILE="$OPENWRT_PROFILE" PACKAGES="$packages" |
+        grep -E '^[^ ]+ - [^ ]+$'
     exit
 fi
 
 make info
-make image PROFILE="$OPENWRT_PROFILE"
+make image PROFILE="$OPENWRT_PROFILE" PACKAGES="$packages"
