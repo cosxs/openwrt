@@ -1,13 +1,13 @@
 # shellcheck shell=bash
 # Helpers sourced by the VM test scripts, which run as root. The router is
 # reached from a client in network namespace "lanc" on the default LAN
-# address; the stock image has no root password, so the tests use ping, TCP
-# connects, the serial log and the root shell the serial console gives.
+# address. The upstream ttylogin default leaves the serial console available
+# as a root shell, independently of the root password used for network login.
 VM_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VM_WORK=${VM_WORK:-/var/tmp/openwrt-vm}
 OVMF_CODE=${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}
 OVMF_VARS=${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}
-LAN_ROUTER=192.168.1.1
+LAN_ROUTER=192.168.72.1
 
 # Run a command in the VM through the serial console and print its output.
 console() {

@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Run one shell command on the VM's serial console and print its output.
 
-The stock image has no root password, so the serial console gives a root
-shell after Enter. Exits with the command's status.
+The upstream ttylogin default makes the serial console enter a root shell
+without authentication, even when root has a password. Exits with the command's status.
 Usage: console.py SOCKET COMMAND
 """
 import re

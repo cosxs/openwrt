@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # VM test of a combined EFI image, as root: fresh install, first-boot checks
-# and a look at the disk afterwards. Copies the serial console log to the optional log directory and
-# exits non-zero when any check fails.
+# and a look at the disk afterwards. Copies the serial console log to the
+# optional log directory and exits non-zero when any check fails.
 # Usage: sudo tests/vm/run.sh path/to/*-squashfs-combined-efi.img.gz [log-dir]
 set -uo pipefail
 . "$(dirname "$0")/lib.sh"
@@ -19,7 +19,7 @@ stop_vm() {
 }
 finish() {
     stop_vm
-    # QEMU creates the serial log as 0640; the copy is for the unprivileged user.
+    # QEMU makes the serial log 0640; this copy is for the unprivileged user.
     [ -z "$log_dir" ] || install -m 0644 "$VM_WORK/serial.log" "$log_dir/vm-serial.log" 2> /dev/null || true
 }
 trap finish EXIT

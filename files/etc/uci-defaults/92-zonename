@@ -1,0 +1,8 @@
+#!/bin/sh
+
+# board.d supplies the factory POSIX timezone; LuCI also needs the zone name.
+# Complete only the generated CST-8/UTC pair, leaving other timezones alone.
+[ "$(uci -q get system.@system[0].timezone)" = 'CST-8' ] || exit 0
+[ "$(uci -q get system.@system[0].zonename)" = 'UTC' ] || exit 0
+uci set system.@system[0].zonename='Asia/Shanghai'
+uci commit system

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Start the firmware under QEMU with UEFI, an NVMe disk and two Intel e1000e
-# NICs: eth0 = LAN bridged to a client in network namespace "lanc", eth1 = WAN
-# via user-mode NAT. Uses KVM when the host offers it.
+# NICs: eth0 = WAN via user-mode NAT, eth1 = LAN bridged to a client in
+# network namespace "lanc". Uses KVM when the host offers it.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -17,7 +17,9 @@ fi
 ip link set veth-h master br-lantest up
 ip netns exec lanc ip link set lo up
 ip netns exec lanc ip link set veth-c address 52:54:00:00:01:01 up
-ip netns exec lanc ip addr replace 192.168.1.2/24 dev veth-c
+# The dedicated test namespace may remain from a previous baseline run.
+ip netns exec lanc ip -4 addr flush dev veth-c
+ip netns exec lanc ip addr add 192.168.72.2/24 dev veth-c
 
 if [ -w /dev/kvm ]; then
     accel=(-accel kvm -cpu host)
@@ -31,10 +33,10 @@ qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \
     -drive if=pflash,format=raw,file="$VM_WORK/ovmf_vars.fd" \
     -drive file="$VM_WORK/disk.raw",if=none,id=nvm,format=raw \
     -device nvme,serial=VMTEST,drive=nvm \
-    -netdev tap,id=lan,ifname=tap-owrt,script=no,downscript=no \
-    -device e1000e,netdev=lan,mac=52:54:00:00:00:11 \
     -netdev user,id=wan \
     -device e1000e,netdev=wan,mac=52:54:00:00:00:10 \
+    -netdev tap,id=lan,ifname=tap-owrt,script=no,downscript=no \
+    -device e1000e,netdev=lan,mac=52:54:00:00:00:11 \
     -display none \
     -chardev socket,id=console,path="$VM_WORK/console.sock",server=on,wait=off,logfile="$VM_WORK/serial.log" \
     -serial chardev:console \

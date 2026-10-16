@@ -1,0 +1,11 @@
+#!/bin/sh
+
+# Factory timezone. config_generate reads it only when it creates the system
+# configuration, so kept settings keep their own.
+. /lib/functions/uci-defaults.sh
+
+board_config_update
+json_select_object system
+json_is_a timezone string || json_add_string timezone CST-8
+json_select ..
+board_config_flush

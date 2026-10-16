@@ -1,0 +1,35 @@
+# Extend the upstream x86 DMI fallback to the bare "Default" placeholder.
+# This hook follows 01_sysinfo and reuses its board-name normalization.
+# If either resulting field is still a placeholder, retain upstream output.
+
+sysinfo_dmi_placeholder() {
+    case "$1" in
+        '' | empty | Default | 'Default string' | 'System manufacturer' | \
+            'System Product Name' | To\ [bB]e\ [fF]illed\ [bB]y\ O.E.M.)
+            return 0
+            ;;
+    esac
+    return 1
+}
+
+do_sysinfo_x86_dmi_default() {
+    local dmi=/sys/devices/virtual/dmi/id vendor product
+
+    vendor=$(cat "$dmi/sys_vendor" 2> /dev/null)
+    product=$(cat "$dmi/product_name" 2> /dev/null)
+    [ "$vendor" = Default ] || [ "$product" = Default ] || return 0
+    if sysinfo_dmi_placeholder "$vendor"; then
+        vendor=$(cat "$dmi/board_vendor" 2> /dev/null)
+    fi
+    if sysinfo_dmi_placeholder "$product"; then
+        product=$(cat "$dmi/board_name" 2> /dev/null)
+    fi
+    sysinfo_dmi_placeholder "$vendor" && return 0
+    sysinfo_dmi_placeholder "$product" && return 0
+
+    mkdir -p /tmp/sysinfo
+    echo "$vendor $product" > /tmp/sysinfo/model
+    sanitize_name_x86 /tmp/sysinfo/model > /tmp/sysinfo/board_name
+}
+
+boot_hook_add preinit_main do_sysinfo_x86_dmi_default

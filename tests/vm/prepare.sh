@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Write the image to an 8 GiB virtual NVMe disk (the 4 GiB system partition alone nearly fills 4 GiB), as a machine is installed.
+# Write the image to an 8 GiB virtual NVMe disk, as a machine is installed. The
+# 4 GiB system partition alone would nearly fill a 4 GiB disk.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 image=$1

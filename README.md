@@ -1,6 +1,27 @@
 # x86-64 OpenWrt 基线
 
-从官方 OpenWrt `x86/64 / generic` 出发的全新基线：第一版不加 `files/`、不加额外软件包，只用官方 ImageBuilder 和官方默认包。定制逐项加在这个基础上。
+从官方 OpenWrt `x86/64 / generic` 出发的基线，使用官方 ImageBuilder 和默认软件包，通过 `profiles/packages.txt` 与 `files/` 逐项增加定制。
+
+本基线不集成 Docker、DDNS、UPnP 或 NextTrace。
+
+初始登录使用 `root` / `159357`。首次启动脚本仅在 root 密码为空时设置该密码；保留配置升级时沿用已有密码，恢复出厂后重新使用初始密码。串口登录仍沿用上游的 `ttylogin` 默认设置，与网络登录密码独立。
+
+出厂时区为 `Asia/Shanghai`，对应系统时区 `CST-8`（UTC+8）。由官方配置生成流程写入新系统，再补齐 LuCI 的时区名称；已有其他时区保持不变。BIOS 的系统厂商或产品名称为裸 `Default` 时，使用有效的主板厂商和型号补齐显示，并沿用上游规则生成板卡标识；没有有效主板信息时保留上游结果。
+
+## 网络出厂配置
+
+| 物理网口 | 分配与地址 | DHCP 服务 |
+|---|---|---|
+| 只有 `eth0` | `eth0` 加入 `br-lan`，LAN 通过上游 DHCP 获取地址、网关和 DNS；没有 WAN 接口，也没有静态备用地址 | 关闭 DHCPv4、DHCPv6 服务和 IPv6 RA |
+| 两个及以上 | `eth0` 为 WAN，默认 DHCP；其余物理 `ethN` 按编号加入 `br-lan`，LAN 地址为 `192.168.72.1/24` | LAN 沿用官方 DHCP 服务默认值 |
+
+单口管理地址从上游路由器的租约列表查询。这里的 DHCP 客户端和 DHCP 服务端是不同角色：单口仍可向上游申请地址，但不向同网段其他设备分配地址。DHCPv6 客户端沿用官方生成逻辑；关闭的是服务端及 RA。
+
+`files/etc/board.d/03-network-defaults` 用上游 `uci-defaults.sh` 的 helper 只描述端口分配和接口协议。官方 `config_generate` 生成 UCI 网络配置，官方 `15_odhcpd` 根据 LAN 协议设置 DHCP/RA 服务模式，不额外覆盖这些服务的脚本或配置文件。
+
+网口统计采用 board detection 阶段已加载驱动的物理有线 `ethN`，与是否插线无关；桥、VLAN、无线和虚拟接口不参与计数。当前不处理 SFP 混合布局或专用端口命名。上游 `02_network` 已描述端口的板卡（如 PC Engines APU）和没有物理 `eth0` 的设备保留上游布局，LAN 地址也是上游的 `192.168.1.1`。后加载、新插入的网卡不自动重排已有配置。Linux 接口编号未必对应机身插孔标签，首次使用需核对。
+
+这些规则仅用于生成出厂配置；保留配置升级沿用用户设置，恢复出厂后重新生成。
 
 ## 版本
 
@@ -18,16 +39,13 @@
 
 ## 检查与测试
 
-- `scripts/verify-image.sh`：在 ImageBuilder 容器里解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear，并且 `lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致。
-- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像。官方镜像没有 root 密码，所以只用串口日志、ping 和 TCP 连接检查：无 kernel panic、UEFI 启动、procd 初始化完成、LAN 地址 `192.168.1.1` 可 ping、SSH 端口可连、没有网页服务。
+- `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
+- `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
+- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭且不覆盖设备自己的设置。
+- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、`192.168.72.1` 管理地址、SSH/HTTP/HTTPS 端口、网口分配、初始密码状态、sing-box 默认关闭及磁盘与挂载。串口仍使用上游的免密控制台。
 
-## 自动构建与发布
+日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 
-GitHub Actions 工作流 `Build firmware`（`.github/workflows/build.yml`）每天北京时间 03:37 定时运行，也可手动运行（可选“强制构建”）；推送代码不会触发构建。
+## 调度
 
-1. 先执行 `scripts/update-pins.sh`，把 OpenWrt 更新到同一系列的最新补丁版本。出现更新的发布系列时不自动切换，开一个 issue 提醒。
-2. 解析软件包（`build.sh --manifest-only`），用 `scripts/build-state.sh` 计算配方和包清单的状态，与最近一次 Release 附带的 `build-state.txt` 比较；没有变化就结束。
-3. 有变化时构建，依次运行镜像检查和虚拟机测试。全部通过后由 `scripts/release.sh` 发布：先把更新后的 `profiles/` 提交并推送，再创建 Release，附带镜像、包清单、构建信息、检查日志和 `SHA256SUMS`。任何一步失败都不提交、不发布。
-4. 不会自动刷机。
-
-目前这些脚本和测试都还没有在真实构建上运行过。
+本分支没有自动调度，也没有发布脚本：更新、构建和验证都由人工调用上面的脚本，不会自动刷机。

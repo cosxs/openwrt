@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Check the contents of a built image: the extracted root file system must be
-# the pinned OpenWrt release for the pinned target and carry exactly the
-# packages of the resolved manifest.
+# Check the contents of a built image in the ImageBuilder container: the
+# extracted root file system must be the pinned OpenWrt release for the pinned
+# target and carry exactly the packages of the resolved manifest.
 # Usage: scripts/verify-image.sh path/to/*-squashfs-rootfs.img.gz
 set -euo pipefail
 
@@ -10,56 +10,21 @@ set -euo pipefail
     exit 2
 }
 project_dir=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
-source "$project_dir/profiles/build.env"
+profile_file="$project_dir/profiles/build.env"
+source "$profile_file"
 image_dir=$(cd "$(dirname "$1")" && pwd)
-image_name=$(basename "$1")
 manifests=("$image_dir"/*.manifest)
 [[ ${#manifests[@]} == 1 && -f ${manifests[0]} ]] || {
     echo "expected exactly one *.manifest next to the image" >&2
     exit 1
 }
 
+# unsquashfs needs root for the device nodes and file ownership of the rootfs.
 docker run --rm --platform linux/amd64 --user root --network none \
-    --env "VERIFY_IMAGE=$image_name" \
-    --env "OPENWRT_VERSION=$OPENWRT_VERSION" \
-    --env "OPENWRT_TARGET=$OPENWRT_TARGET" \
-    --env "SINGBOX_VERSION=$SINGBOX_VERSION" \
+    --env-file "$profile_file" \
+    --env "IMAGE=$(basename "$1")" \
     --env "MANIFEST=$(basename "${manifests[0]}")" \
     --mount "type=bind,source=$image_dir,target=/input,readonly" \
-    "$IMAGEBUILDER_IMAGE" /bin/bash -euo pipefail -c '
-        gzip -dc "/input/$VERIFY_IMAGE" > /tmp/rootfs.img
-        /builder/staging_dir/host/bin/unsquashfs4 \
-            -d /tmp/inspect-root /tmp/rootfs.img > /tmp/unsquashfs.log
-        release=/tmp/inspect-root/etc/openwrt_release
-        grep -qx "DISTRIB_RELEASE=.$OPENWRT_VERSION." "$release"
-        grep -qx "DISTRIB_TARGET=.$OPENWRT_TARGET." "$release"
-        echo "PASS: the image is OpenWrt $OPENWRT_VERSION for $OPENWRT_TARGET"
-        test -x /tmp/inspect-root/sbin/init
-        test -x /tmp/inspect-root/sbin/procd
-        test -x /tmp/inspect-root/usr/sbin/dropbear
-        echo "PASS: the image has init, procd and dropbear"
-        awk "/^P:/ {p = substr(\$0, 3)} /^V:/ {print p, \"-\", substr(\$0, 3)}" \
-            /tmp/inspect-root/lib/apk/db/installed | LC_ALL=C sort > /tmp/installed.txt
-        grep -E "^[^ ]+ - [^ ]+$" "/input/$MANIFEST" | LC_ALL=C sort > /tmp/manifest.txt
-        diff /tmp/manifest.txt /tmp/installed.txt
-        echo "PASS: the installed packages are exactly the resolved manifest"
-        grep -Eqx "sing-box - $SINGBOX_VERSION(-r[0-9]+)?" /tmp/installed.txt
-        echo "PASS: the installed sing-box is the pinned $SINGBOX_VERSION"
-        script=/etc/uci-defaults/91-sing-box-default
-        test -x "/tmp/inspect-root$script"
-        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 1
-        # Run the default on a copy of the shipped state: /rom is not mounted here.
-        mkdir -p /tmp/inspect-root/rom/etc/sing-box /tmp/inspect-root/rom/etc/config
-        cp /tmp/inspect-root/etc/config/sing-box /tmp/inspect-root/rom/etc/config/sing-box
-        cp /tmp/inspect-root/etc/sing-box/config.json /tmp/inspect-root/rom/etc/sing-box/config.json
-        chroot /tmp/inspect-root /bin/sh "$script"
-        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 0
-        echo "PASS: sing-box ships enabled and the first-boot default turns it off"
-        # A device with its own configuration keeps its choice on a second run.
-        chroot /tmp/inspect-root /sbin/uci set sing-box.main.enabled=1
-        chroot /tmp/inspect-root /sbin/uci commit sing-box
-        echo "{}" > /tmp/inspect-root/etc/sing-box/config.json
-        chroot /tmp/inspect-root /bin/sh "$script"
-        test "$(chroot /tmp/inspect-root /sbin/uci -q get sing-box.main.enabled)" = 1
-        echo "PASS: the default leaves a device that has its own sing-box setup alone"
-    ' 2>&1 | tee "$image_dir/verification.log"
+    --mount "type=bind,source=$project_dir,target=/work,readonly" \
+    "$IMAGEBUILDER_IMAGE" /bin/bash /work/scripts/verify-rootfs.sh \
+    2>&1 | tee "$image_dir/verification.log"
