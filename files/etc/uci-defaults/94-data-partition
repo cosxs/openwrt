@@ -1,51 +1,18 @@
 #!/bin/sh
 
-# Storage defaults: fstab entries and, on a freshly written disk, the swap and
-# data partitions they refer to.
+# On a freshly written disk, turn the space after the image into the swap and
+# data partitions that 93-fstab-defaults refers to.
 #
-# fstab: mount the partition labelled "data" at /data and switch on the swap
-# partition labelled "swap" at every boot. An fstab that already mounts that
-# label or something at /data, or has a swap section for that label, e.g. from
-# kept settings, is left unchanged. This part comes first and always runs, so
-# that the partition part below can end the script early.
-#
-# Partitions: when the boot disk holds only the image's partitions (1, 2 and
-# 128) and at least 1 GiB beyond them, the space becomes a partition named
-# "data", formatted as ext4 and labelled "data", overwriting whatever an
-# earlier system left there. With at least 2 GiB beyond them, the first GiB
-# becomes a partition named "swap", made into swap labelled "swap", and "data"
-# follows it and runs to the end of the disk, so it is the partition to grow on
-# a larger disk. Unformatted partitions of these names, as an interrupted first
-# boot leaves them, are formatted. Nothing changes while any disk holds a
-# filesystem labelled "data" or the boot disk holds other partitions. Runs
-# before fstab and dockerd start.
-
-mount_data() {
-    local section
-
-    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=mount$/\1/p'); do
-        [ "$(uci -q get "fstab.$section.target")" = /data ] && return
-        [ "$(uci -q get "fstab.$section.label")" = data ] && return
-    done
-    uci add fstab mount > /dev/null
-    uci set fstab.@mount[-1].target='/data'
-    uci set fstab.@mount[-1].label='data'
-    uci set fstab.@mount[-1].enabled='1'
-    uci commit fstab
-}
-enable_swap() {
-    local section
-
-    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=swap$/\1/p'); do
-        [ "$(uci -q get "fstab.$section.label")" = swap ] && return
-    done
-    uci add fstab swap > /dev/null
-    uci set fstab.@swap[-1].label='swap'
-    uci set fstab.@swap[-1].enabled='1'
-    uci commit fstab
-}
-mount_data
-enable_swap
+# When the boot disk holds only the image's partitions (1, 2 and 128) and at
+# least 1 GiB beyond them, the space becomes a partition named "data",
+# formatted as ext4 and labelled "data", overwriting whatever an earlier system
+# left there. With at least 2 GiB beyond them, the first GiB becomes a
+# partition named "swap", made into swap labelled "swap", and "data" follows it
+# and runs to the end of the disk, so it is the partition to grow on a larger
+# disk. Unformatted partitions of these names, as an interrupted first boot
+# leaves them, are formatted. Nothing changes while any disk holds a filesystem
+# labelled "data" or the boot disk holds other partitions. Runs before fstab
+# starts.
 
 # The system log starts later in boot; the kernel log keeps these messages.
 log() {

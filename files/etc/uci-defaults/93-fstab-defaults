@@ -1,0 +1,33 @@
+#!/bin/sh
+
+# Mount the partition labelled "data" at /data and switch on the swap
+# partition labelled "swap" at every boot; 94-data-partition creates both on
+# a freshly written disk. An fstab that already mounts that label or something
+# at /data, or has a swap section for that label, e.g. from kept settings, is
+# left unchanged.
+
+mount_data() {
+    local section
+
+    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=mount$/\1/p'); do
+        [ "$(uci -q get "fstab.$section.target")" = /data ] && return
+        [ "$(uci -q get "fstab.$section.label")" = data ] && return
+    done
+    uci add fstab mount > /dev/null
+    uci set fstab.@mount[-1].target='/data'
+    uci set fstab.@mount[-1].label='data'
+    uci set fstab.@mount[-1].enabled='1'
+}
+enable_swap() {
+    local section
+
+    for section in $(uci -q show fstab | sed -n 's/^fstab\.\([^.=]*\)=swap$/\1/p'); do
+        [ "$(uci -q get "fstab.$section.label")" = swap ] && return
+    done
+    uci add fstab swap > /dev/null
+    uci set fstab.@swap[-1].label='swap'
+    uci set fstab.@swap[-1].enabled='1'
+}
+mount_data
+enable_swap
+uci commit fstab
