@@ -34,6 +34,10 @@ check 'WAN protocol' dhcp "$(console 'uci -q get network.wan.proto')"
 check 'LAN device' br-lan "$(console 'uci -q get network.lan.device')"
 check 'LAN bridge ports' eth1 "$(console 'uci -q get network.@device[0].ports')"
 check 'LAN DHCP server' server "$(console 'uci -q get dhcp.lan.dhcpv4')"
+check 'flow offloading' 1 "$(console 'uci -q get firewall.@defaults[0].flow_offloading')"
+check 'flow table in the ruleset' 1 "$(console 'nft list flowtables inet | grep -c "flowtable ft"')"
+check 'no SYN rate limit on the input chain' 0 \
+    "$(console 'nft list chain inet fw4 input | grep -c syn_flood')"
 check 'root password initialized' set \
     "$(console 'grep -Eq "^root:[$]6[$]" /etc/shadow && echo set || echo unset')"
 check '/data mounted from the data partition' '/dev/nvme0n1p4 ext4' \

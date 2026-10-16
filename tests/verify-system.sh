@@ -134,4 +134,32 @@ chroot "$root" /bin/sh "$script"
 expect sing-box.main.enabled 1
 echo 'PASS: the default leaves a device that has its own sing-box setup alone'
 
+script=/etc/uci-defaults/95-firewall-defaults
+firewall="$root/etc/config/firewall"
+expect 'firewall.@defaults[0].flow_offloading' ''
+expect 'firewall.@defaults[0].syn_flood' 1
+expect 'firewall.@defaults[0].synflood_protect' ''
+cp "$firewall" "$root/rom/etc/config/firewall"
+chroot "$root" /sbin/uci -q show firewall > "$work/firewall.shipped"
+chroot "$root" /bin/sh "$script"
+expect 'firewall.@defaults[0].flow_offloading' 1
+expect 'firewall.@defaults[0].syn_flood' ''
+expect 'firewall.@defaults[0].synflood_protect' 0
+# Nothing else in the firewall configuration changes.
+chroot "$root" /sbin/uci -q show firewall |
+    grep -v -e '^firewall\.@defaults\[0\]\.flow_offloading=' \
+        -e '^firewall\.@defaults\[0\]\.synflood_protect=' |
+    cmp - <(grep -v '^firewall\.@defaults\[0\]\.syn_flood=' "$work/firewall.shipped")
+echo 'PASS: the firewall default turns on flow offloading and off the SYN limit'
+cp "$firewall" "$work/firewall.initial"
+chroot "$root" /bin/sh "$script"
+cmp "$firewall" "$work/firewall.initial"
+echo 'PASS: the firewall default is idempotent'
+chroot "$root" /sbin/uci set 'firewall.@defaults[0].flow_offloading=0'
+chroot "$root" /sbin/uci set 'firewall.@defaults[0].synflood_protect=1'
+chroot "$root" /sbin/uci commit firewall
+cp "$firewall" "$work/firewall.kept"
+chroot "$root" /bin/sh "$script"
+cmp "$firewall" "$work/firewall.kept"
+echo 'PASS: a firewall restored from kept settings keeps its choices'
 echo 'System defaults tests passed'

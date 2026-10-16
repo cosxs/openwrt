@@ -1,0 +1,16 @@
+#!/bin/sh
+
+# Factory firewall defaults, applied only while the firewall configuration is
+# still the shipped one, so one restored from kept settings keeps its choices.
+# - Software flow offloading: forwarded connections, once established, take
+#   the kernel's fast path.
+# - No SYN rate limit. fw4's syn_flood chain (25 SYN/s, burst 50) sits on the
+#   input chain, where connections the router redirects to a local service
+#   arrive, and bursts of new connections from the LAN then time out. The WAN
+#   zone rejects new input connections anyway. Like LuCI, this replaces the
+#   shipped deprecated syn_flood with synflood_protect.
+cmp -s /etc/config/firewall /rom/etc/config/firewall || exit 0
+uci set firewall.@defaults[0].flow_offloading='1'
+uci -q delete firewall.@defaults[0].syn_flood
+uci set firewall.@defaults[0].synflood_protect='0'
+uci commit firewall

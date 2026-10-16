@@ -8,6 +8,8 @@
 
 出厂时区为 `Asia/Shanghai`，对应系统时区 `CST-8`（UTC+8）。由官方配置生成流程写入新系统，再补齐 LuCI 的时区名称；已有其他时区保持不变。BIOS 的系统厂商或产品名称为裸 `Default` 时，使用有效的主板厂商和型号补齐显示，并沿用上游规则生成板卡标识；没有有效主板信息时保留上游结果。
 
+防火墙出厂开启软件流量卸载，并关闭 fw4 在 input 链上的 SYN 限速（每秒 25 个、突发 50 个）：路由器把连接重定向到本机服务时，这些连接都经过 input 链，LAN 的突发新连接会超时。WAN 区域本来就拒绝新的入站连接。只在防火墙配置仍是出厂版本时修改，保留配置升级沿用用户设置。
+
 ## 网络出厂配置
 
 | 物理网口 | 分配与地址 | DHCP 服务 |
@@ -41,8 +43,8 @@
 
 - `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
 - `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
-- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭且不覆盖设备自己的设置。
-- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、`192.168.72.1` 管理地址、SSH/HTTP/HTTPS 端口、网口分配、初始密码状态、sing-box 默认关闭及磁盘与挂载。串口仍使用上游的免密控制台。
+- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载并关闭 SYN 限速，且都不覆盖设备自己的设置。
+- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、`192.168.72.1` 管理地址、SSH/HTTP/HTTPS 端口、网口分配、初始密码状态、流量卸载与 SYN 限速、sing-box 默认关闭及磁盘与挂载。串口仍使用上游的免密控制台。
 
 日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 
