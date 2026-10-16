@@ -18,13 +18,6 @@ series=${OPENWRT_VERSION%.*}
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 
-hash_file() {
-    if command -v sha256sum > /dev/null; then
-        sha256sum "$1" | awk '{print $1}'
-    else
-        shasum -a 256 "$1" | awk '{print $1}'
-    fi
-}
 fetch() {
     curl --fail --silent --show-error --location --retry 3 "$@"
 }
@@ -44,7 +37,7 @@ fetch_asset() {
     url=$(asset_field "$release" "$name" .browser_download_url)
     [[ -n $url ]] || { echo "release asset $name not found" >&2; exit 1; }
     fetch -o "$work/$name" "$url"
-    sha256=$(hash_file "$work/$name")
+    sha256=$(sha256sum < "$work/$name" | cut -d ' ' -f 1)
     digest=$(asset_field "$release" "$name" .digest)
     [[ -z $digest || $digest == "sha256:$sha256" ]] || {
         echo "$name does not match its published digest $digest" >&2

@@ -21,28 +21,24 @@ command -v docker >/dev/null || { echo 'Docker is required.' >&2; exit 1; }
 command -v curl >/dev/null || { echo 'curl is required.' >&2; exit 1; }
 docker info >/dev/null
 
-hash_file() {
-    if command -v sha256sum >/dev/null; then
-        sha256sum "$1" | awk '{print $1}'
-    else
-        shasum -a 256 "$1" | awk '{print $1}'
-    fi
-}
-
 download_dir="$project_dir/.build/downloads"
 mkdir -p "$download_dir"
 
-# Download a pinned release asset once and verify it against its SHA256.
+sha256() {
+    sha256sum < "$1" | cut -d ' ' -f 1
+}
+# Download a pinned release asset unless a copy with its SHA256 is cached. A
+# cached file that does not match, e.g. a stale pin, is downloaded again.
 fetch_verified() {
     local url=$1 file=$2 sha256=$3
-    if [[ ! -f "$file" ]]; then
-        curl --fail --location --retry 3 "$url" -o "$file.part"
-        mv "$file.part" "$file"
-    fi
-    if [[ $(hash_file "$file") != "$sha256" ]]; then
-        echo "SHA256 mismatch: $file" >&2
+    [[ -f $file && $(sha256 "$file") == "$sha256" ]] && return
+    curl --fail --location --retry 3 "$url" -o "$file.part"
+    [[ $(sha256 "$file.part") == "$sha256" ]] || {
+        rm -f "$file.part"
+        echo "SHA256 mismatch: $url" >&2
         exit 1
-    fi
+    }
+    mv "$file.part" "$file"
 }
 
 fetch_verified "$SINGBOX_APK_URL" \
