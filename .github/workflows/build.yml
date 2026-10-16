@@ -1,0 +1,92 @@
+name: Build firmware
+
+# Runs on demand only. Builds the image from the pinned inputs in
+# profiles/build.env, checks what the image contains, tests the network and
+# system defaults on its root file system, boots it in a VM for the
+# first-boot checks and a keep-settings upgrade, and keeps the image with its
+# records as a workflow artifact. It neither moves the pins nor publishes a
+# release.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: firmware-${{ github.ref }}
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  firmware:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+
+      - name: Build
+        id: build
+        run: |
+          ./scripts/build.sh
+          dirs=(artifacts/*/*/)
+          dir=${dirs[-1]}
+          echo "dir=${dir%/}" >> "$GITHUB_OUTPUT"
+
+      - name: Check the image contents
+        env:
+          DIR: ${{ steps.build.outputs.dir }}
+        run: ./scripts/verify-image.sh "$DIR"/*-squashfs-rootfs.img.gz
+
+      - name: Extract the root file system
+        env:
+          DIR: ${{ steps.build.outputs.dir }}
+        run: |
+          source profiles/build.env
+          rootfs=$RUNNER_TEMP/rootfs
+          gzip -dc "$DIR"/*-squashfs-rootfs.img.gz > "$RUNNER_TEMP/rootfs.img"
+          docker run --rm --platform linux/amd64 --user root --network none \
+            --mount "type=bind,source=$RUNNER_TEMP,target=/work" \
+            "$IMAGEBUILDER_IMAGE" \
+            /builder/staging_dir/host/bin/unsquashfs4 -q -d /work/rootfs /work/rootfs.img
+          echo "ROOTFS=$rootfs" >> "$GITHUB_ENV"
+
+      - name: Test the network defaults
+        run: sudo tests/verify-network.sh "$ROOTFS"
+
+      - name: Test the system defaults
+        run: sudo tests/verify-system.sh "$ROOTFS"
+
+      - name: Install the VM test tools
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends qemu-system-x86 ovmf
+
+      - name: Test in a VM
+        env:
+          DIR: ${{ steps.build.outputs.dir }}
+        run: |
+          work=/mnt/openwrt-vm
+          [[ -d /mnt ]] || work=$RUNNER_TEMP/openwrt-vm
+          sudo VM_WORK="$work" tests/vm/run.sh "$DIR"/*-squashfs-combined-efi.img.gz "$DIR" 2>&1 |
+            tee "$DIR/vm-test.log"
+
+      - name: Keep the image and its records
+        if: always() && steps.build.outputs.dir != ''
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: firmware-${{ github.run_id }}
+          path: |
+            ${{ steps.build.outputs.dir }}/*-squashfs-combined-efi.img.gz
+            ${{ steps.build.outputs.dir }}/*.manifest
+            ${{ steps.build.outputs.dir }}/sha256sums
+            ${{ steps.build.outputs.dir }}/build.env
+            ${{ steps.build.outputs.dir }}/build-info.txt
+            ${{ steps.build.outputs.dir }}/*.log
+          if-no-files-found: ignore
+          retention-days: 30

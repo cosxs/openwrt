@@ -54,6 +54,8 @@ LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带�
 
 日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 
-## 调度
+## GitHub Actions
 
-本分支没有自动调度，也没有发布脚本：更新、构建和验证都由人工调用上面的脚本，不会自动刷机。
+工作流 `Build firmware`（`.github/workflows/build.yml`）只能手动运行，推送代码不会触发。它按 `profiles/build.env` 固定的版本构建镜像，依次运行 `scripts/verify-image.sh`、`tests/verify-network.sh`、`tests/verify-system.sh` 和含保留配置升级的 `tests/vm/`，把镜像、包清单、构建记录和测试日志保存为工作流产物，保留 30 天。
+
+工作流不更新固定版本、不发布 Release，也不会自动刷机：版本由人工运行 `scripts/update-pins.sh` 并提交。
