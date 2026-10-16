@@ -20,3 +20,9 @@ parted
 # newest release) is newer than the official feed's sing-box; verify-image.sh
 # fails if another version is chosen.
 sing-box
+# Web terminal and its LuCI page.
+ttyd
+luci-app-ttyd
+luci-i18n-ttyd-zh-cn
+# Network throughput measurement.
+iperf3
