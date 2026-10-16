@@ -29,7 +29,7 @@ else
 fi
 rm -f "$VM_WORK/serial.log" "$VM_WORK/console.sock"
 wan=user,id=wan
-for forward in "$WAN_SSH:22" "$WAN_HTTP:80" "$WAN_HTTPS:443" "$WAN_TTYD:7681"; do
+for forward in "$WAN_SSH:22" "$WAN_HTTP:80" "$WAN_TTYD:7681"; do
     wan+=",hostfwd=tcp:127.0.0.1:${forward%:*}-:${forward#*:}"
 done
 qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \

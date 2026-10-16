@@ -24,7 +24,9 @@ tcp_open() {
 check 'ping the LAN address' ok "$(lan ping -c 3 -W 2 "$LAN_ROUTER" > /dev/null 2>&1 && echo ok || echo failed)"
 check 'SSH port from the LAN' open "$(tcp_open 22)"
 check 'LuCI over HTTP' open "$(tcp_open 80)"
-check 'LuCI over HTTPS' open "$(tcp_open 443)"
+# Without a certificate generator, uhttpd leaves HTTPS off; uhttpd is up by now.
+check 'no HTTPS on the LAN' closed \
+    "$(lan timeout 5 bash -c "echo > /dev/tcp/$LAN_ROUTER/443" 2> /dev/null && echo open || echo closed)"
 
 echo "== 存储与服务（串口控制台）"
 check 'system timezone' CST-8 "$(console 'uci -q get system.@system[0].timezone')"
@@ -54,7 +56,7 @@ wan_ssh() {
 }
 # The HTTP status of a WAN-side request, 000 when the connection is refused.
 wan_http() {
-    curl -sk -o /dev/null -m 20 -w '%{http_code}' "$1" 2> /dev/null
+    curl -s -o /dev/null -m 20 -w '%{http_code}' "$1" 2> /dev/null
 }
 wan_set() {
     console 'nft list set inet fw4 wan_admin_subnet' | sed -n 's/.*elements = { \(.*\) }.*/\1/p'
@@ -71,19 +73,18 @@ wait_set() {
 }
 wan_access() {
     check "SSH from the WAN side$1" "$2" "$(wan_ssh)"
-    check "LuCI over HTTPS from the WAN side$1" "$3" "$(wan_http "https://127.0.0.1:$WAN_HTTPS/")"
-    check "LuCI over HTTP from the WAN side$1" "$4" "$(wan_http "http://127.0.0.1:$WAN_HTTP/")"
-    check "ttyd from the WAN side$1" "$5" "$(wan_http "http://127.0.0.1:$WAN_TTYD/")"
+    check "LuCI from the WAN side$1" "$3" "$(wan_http "http://127.0.0.1:$WAN_HTTP/")"
+    check "ttyd from the WAN side$1" "$4" "$(wan_http "http://127.0.0.1:$WAN_TTYD/")"
 }
 check 'WAN admin set after boot' 10.0.2.0/24 "$(wait_set 10.0.2.0/24)"
 check 'WAN admin rule is IPv4 only' '1 0' \
     "$(console 'nft list chain inet fw4 input_wan | grep Allow-Admin | grep -c "ip saddr @wan_admin_subnet"; nft list chain inet fw4 input_wan | grep -c "ip6.*Allow-Admin"' | xargs)"
 check 'ttyd from the LAN' 200 \
     "$(lan curl -s -o /dev/null -m 20 -w '%{http_code}' "http://$LAN_ROUTER:7681/")"
-wan_access '' SSH-2.0 200 200 200
+wan_access '' SSH-2.0 200 200
 console 'ifdown wan' > /dev/null
 check 'WAN admin set with the WAN down' '' "$(wait_set '')"
-wan_access ' with the WAN down' '' 000 000 000
+wan_access ' with the WAN down' '' 000 000
 console 'ifup wan' > /dev/null
 check 'WAN admin set restored by the WAN coming up' 10.0.2.0/24 "$(wait_set 10.0.2.0/24)"
-wan_access ' after the WAN came up again' SSH-2.0 200 200 200
+wan_access ' after the WAN came up again' SSH-2.0 200 200

@@ -153,7 +153,7 @@ expect firewall.wan_admin rule
 expect firewall.wan_admin.src wan
 expect firewall.wan_admin.family ipv4
 expect firewall.wan_admin.proto tcp
-expect firewall.wan_admin.dest_port '22 80 443 7681'
+expect firewall.wan_admin.dest_port '22 80 7681'
 expect firewall.wan_admin.ipset wan_admin_subnet
 expect firewall.wan_admin.target ACCEPT
 # Nothing else in the firewall configuration changes.

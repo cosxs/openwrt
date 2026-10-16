@@ -4,8 +4,6 @@ luci
 luci-i18n-base-zh-cn
 luci-i18n-firewall-zh-cn
 luci-i18n-package-manager-zh-cn
-# HTTPS for LuCI: uhttpd TLS and the tool that generates its certificate.
-luci-ssl
 # BBR congestion control; the package also sets it as the default.
 kmod-tcp-bbr
 # Network diagnostics. mtr-json is the mtr build with JSON output, which
