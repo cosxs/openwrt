@@ -1,0 +1,32 @@
+#!/bin/sh
+
+# Keep the firewall set wan_admin_subnet at the WAN's own IPv4 subnet while it
+# is a private /24 to /30, the size of a home network behind an upstream
+# router. A public, point-to-point or carrier-sized subnet, or a WAN that is
+# down, empties it. The set's file is in RAM, so every boot starts empty.
+[ "$INTERFACE" = wan ] || exit 0
+case "$ACTION" in
+    ifup|ifupdate|ifdown) ;;
+    *) exit 0 ;;
+esac
+
+subnet=''
+cidr=''
+if [ "$ACTION" != ifdown ]; then
+    . /lib/functions/network.sh
+    if network_get_subnet cidr wan; then
+        eval "$(/bin/ipcalc.sh "$cidr")"
+        if [ "$PREFIX" -ge 24 ] && [ "$PREFIX" -le 30 ]; then
+            case "$NETWORK" in
+                10.*|172.1[6-9].*|172.2[0-9].*|172.3[01].*|192.168.*)
+                    subnet=$NETWORK/$PREFIX
+                    ;;
+            esac
+        fi
+    fi
+fi
+
+file=/var/run/wan-admin-subnet
+[ "$subnet" = "$(cat "$file" 2> /dev/null)" ] && exit 0
+printf '%s\n' "$subnet" > "$file"
+fw4 -q reload-sets

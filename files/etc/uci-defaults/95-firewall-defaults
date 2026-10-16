@@ -9,8 +9,28 @@
 #   arrive, and bursts of new connections from the LAN then time out. The WAN
 #   zone rejects new input connections anyway. Like LuCI, this replaces the
 #   shipped deprecated syn_flood with synflood_protect.
+# - SSH, LuCI over HTTP and HTTPS, and the web terminal from the WAN's own
+#   subnet, the upstream home network. The hotplug script 30-wan-admin-subnet
+#   fills the set only while that subnet is a private IPv4 /24 to /30, so a
+#   public, point-to-point or carrier-sized WAN subnet opens nothing. IPv4
+#   only: the WAN's public IPv6 address stays closed.
 cmp -s /etc/config/firewall /rom/etc/config/firewall || exit 0
 uci set firewall.@defaults[0].flow_offloading='1'
 uci -q delete firewall.@defaults[0].syn_flood
 uci set firewall.@defaults[0].synflood_protect='0'
+
+uci set firewall.wan_admin_subnet=ipset
+uci set firewall.wan_admin_subnet.name='wan_admin_subnet'
+uci set firewall.wan_admin_subnet.family='ipv4'
+uci add_list firewall.wan_admin_subnet.match='src_net'
+uci set firewall.wan_admin_subnet.loadfile='/var/run/wan-admin-subnet'
+
+uci set firewall.wan_admin=rule
+uci set firewall.wan_admin.name='Allow-Admin-From-WAN-Subnet'
+uci set firewall.wan_admin.src='wan'
+uci set firewall.wan_admin.family='ipv4'
+uci set firewall.wan_admin.proto='tcp'
+uci set firewall.wan_admin.dest_port='22 80 443 7681'
+uci set firewall.wan_admin.ipset='wan_admin_subnet'
+uci set firewall.wan_admin.target='ACCEPT'
 uci commit firewall

@@ -145,12 +145,24 @@ chroot "$root" /bin/sh "$script"
 expect 'firewall.@defaults[0].flow_offloading' 1
 expect 'firewall.@defaults[0].syn_flood' ''
 expect 'firewall.@defaults[0].synflood_protect' 0
+expect firewall.wan_admin_subnet ipset
+expect firewall.wan_admin_subnet.family ipv4
+expect firewall.wan_admin_subnet.match src_net
+expect firewall.wan_admin_subnet.loadfile /var/run/wan-admin-subnet
+expect firewall.wan_admin rule
+expect firewall.wan_admin.src wan
+expect firewall.wan_admin.family ipv4
+expect firewall.wan_admin.proto tcp
+expect firewall.wan_admin.dest_port '22 80 443 7681'
+expect firewall.wan_admin.ipset wan_admin_subnet
+expect firewall.wan_admin.target ACCEPT
 # Nothing else in the firewall configuration changes.
 chroot "$root" /sbin/uci -q show firewall |
     grep -v -e '^firewall\.@defaults\[0\]\.flow_offloading=' \
-        -e '^firewall\.@defaults\[0\]\.synflood_protect=' |
+        -e '^firewall\.@defaults\[0\]\.synflood_protect=' \
+        -e '^firewall\.wan_admin_subnet[.=]' -e '^firewall\.wan_admin[.=]' |
     cmp - <(grep -v '^firewall\.@defaults\[0\]\.syn_flood=' "$work/firewall.shipped")
-echo 'PASS: the firewall default turns on flow offloading and off the SYN limit'
+echo 'PASS: the firewall default sets offloading, the SYN limit and the WAN admin rule'
 cp "$firewall" "$work/firewall.initial"
 chroot "$root" /bin/sh "$script"
 cmp "$firewall" "$work/firewall.initial"
@@ -162,4 +174,64 @@ cp "$firewall" "$work/firewall.kept"
 chroot "$root" /bin/sh "$script"
 cmp "$firewall" "$work/firewall.kept"
 echo 'PASS: a firewall restored from kept settings keeps its choices'
+
+script=/etc/uci-defaults/96-ttyd-defaults
+ttyd="$root/etc/config/ttyd"
+expect 'ttyd.@ttyd[0].interface' @lan
+mkdir -p "$root/rom/etc/config"
+cp "$ttyd" "$root/rom/etc/config/ttyd"
+chroot "$root" /sbin/uci -q show ttyd > "$work/ttyd.shipped"
+chroot "$root" /bin/sh "$script"
+expect 'ttyd.@ttyd[0].interface' ''
+chroot "$root" /sbin/uci -q show ttyd |
+    cmp - <(grep -v '^ttyd\.@ttyd\[0\]\.interface=' "$work/ttyd.shipped")
+echo 'PASS: ttyd listens on all addresses on a new system'
+chroot "$root" /sbin/uci set 'ttyd.@ttyd[0].interface=@lan'
+chroot "$root" /sbin/uci commit ttyd
+cp "$ttyd" "$work/ttyd.kept"
+chroot "$root" /bin/sh "$script"
+cmp "$ttyd" "$work/ttyd.kept"
+echo 'PASS: a ttyd configuration restored from kept settings keeps its choices'
+
+# The WAN subnet hotplug script with the image's ipcalc.sh. netifd's answer
+# comes from WAN_CIDR, and fw4 only records that it was asked to reload.
+hotplug=/etc/hotplug.d/iface/30-wan-admin-subnet
+cat > "$root/lib/functions/network.sh" <<'SH'
+network_get_subnet() { [ -n "$WAN_CIDR" ] && eval "$1=\$WAN_CIDR"; }
+SH
+fw4=$(chroot "$root" /bin/sh -c 'command -v fw4')
+printf '#!/bin/sh\necho "$*" >> /tmp/fw4.calls\n' > "$root$fw4"
+mkdir -p "$root/tmp/run"
+: > "$root/tmp/fw4.calls"
+# Run the script for ACTION $2 and WAN address $3 on interface $1, and expect
+# the set file to hold $4 and fw4 to have reloaded the sets $5 times in all.
+hotplug_case() {
+    local actual reloads
+    chroot "$root" env INTERFACE="$1" ACTION="$2" WAN_CIDR="$3" /bin/sh "$hotplug"
+    actual=$(cat "$root/tmp/run/wan-admin-subnet" 2> /dev/null || true)
+    reloads=$(grep -c '^-q reload-sets$' "$root/tmp/fw4.calls" || true)
+    [[ $actual == "$4" && $reloads == "$5" ]] || {
+        echo "FAIL: $1 $2 [$3]: set [$actual], reloads [$reloads]; expected [$4], [$5]" >&2
+        exit 1
+    }
+    echo "PASS: $1 $2 [$3] allows [$4]"
+}
+hotplug_case wan ifup '' '' 0
+hotplug_case wan ifup 10.10.10.10/24 10.10.10.0/24 1
+hotplug_case wan ifupdate 10.10.10.10/24 10.10.10.0/24 1
+hotplug_case lan ifup 192.168.72.1/24 10.10.10.0/24 1
+hotplug_case wan ifup 192.168.31.5/24 192.168.31.0/24 2
+hotplug_case wan ifup 172.31.200.70/26 172.31.200.64/26 3
+hotplug_case wan ifup 10.0.0.2/30 10.0.0.0/30 4
+hotplug_case wan ifdown 10.0.0.2/30 '' 5
+for cidr in 10.10.10.10/24 10.183.70.235/16 10.10.10.10/24 192.168.2.10/23 \
+    10.10.10.10/24 10.0.0.2/31 10.10.10.10/24 203.0.113.10/32 \
+    10.10.10.10/24 172.32.0.5/24 10.10.10.10/24 100.64.1.2/24; do
+    case $cidr in
+        10.10.10.10/24) expected=10.10.10.0/24 ;;
+        *) expected='' ;;
+    esac
+    reloads=$(( $(grep -c . "$root/tmp/fw4.calls") + 1 ))
+    hotplug_case wan ifup "$cidr" "$expected" "$reloads"
+done
 echo 'System defaults tests passed'

@@ -1,4 +1,4 @@
-# shellcheck shell=bash
+# shellcheck shell=bash disable=SC2034 # variables for the scripts that source this
 # Helpers sourced by the VM test scripts, which run as root. The router is
 # reached from a client in network namespace "lanc" on the default LAN
 # address. The upstream ttylogin default leaves the serial console available
@@ -8,6 +8,12 @@ VM_WORK=${VM_WORK:-/var/tmp/openwrt-vm}
 OVMF_CODE=${OVMF_CODE:-/usr/share/OVMF/OVMF_CODE_4M.fd}
 OVMF_VARS=${OVMF_VARS:-/usr/share/OVMF/OVMF_VARS_4M.fd}
 LAN_ROUTER=192.168.72.1
+# Host ports that QEMU forwards to the router's WAN address. The forwarded
+# connections reach the router from 10.0.2.2, inside the WAN's own 10.0.2.0/24.
+WAN_SSH=20022
+WAN_HTTP=20080
+WAN_HTTPS=20443
+WAN_TTYD=27681
 
 # Run a command in the VM through the serial console and print its output.
 console() {

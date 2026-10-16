@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# The upstream ttyd package listens on the LAN only. LuCI's terminal page
+# connects to port 7681 directly, so listen on all addresses and leave the
+# access to the firewall, which admits the WAN's own subnet like the rest of
+# the web interface. Applied only while the ttyd configuration is still the
+# shipped one.
+cmp -s /etc/config/ttyd /rom/etc/config/ttyd || exit 0
+uci -q delete ttyd.@ttyd[0].interface
+uci commit ttyd

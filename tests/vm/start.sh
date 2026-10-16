@@ -28,12 +28,16 @@ else
     accel=(-accel tcg,thread=multi -cpu max)
 fi
 rm -f "$VM_WORK/serial.log" "$VM_WORK/console.sock"
+wan=user,id=wan
+for forward in "$WAN_SSH:22" "$WAN_HTTP:80" "$WAN_HTTPS:443" "$WAN_TTYD:7681"; do
+    wan+=",hostfwd=tcp:127.0.0.1:${forward%:*}-:${forward#*:}"
+done
 qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,file="$VM_WORK/ovmf_vars.fd" \
     -drive file="$VM_WORK/disk.raw",if=none,id=nvm,format=raw \
     -device nvme,serial=VMTEST,drive=nvm \
-    -netdev user,id=wan \
+    -netdev "$wan" \
     -device e1000e,netdev=wan,mac=52:54:00:00:00:10 \
     -netdev tap,id=lan,ifname=tap-owrt,script=no,downscript=no \
     -device e1000e,netdev=lan,mac=52:54:00:00:00:11 \

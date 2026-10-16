@@ -46,3 +46,44 @@ check 'swap in use' '/dev/nvme0n1p3 partition' \
     "$(console "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
 check 'sing-box enabled in UCI' 0 "$(console 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(console 'pidof sing-box > /dev/null && echo yes || echo no')"
+
+echo "== WAN 侧管理"
+# The first bytes SSH sends, or nothing when the connection is refused.
+wan_ssh() {
+    timeout 10 bash -c "exec 3<> /dev/tcp/127.0.0.1/$WAN_SSH && head -c 7 <&3" 2> /dev/null
+}
+# The HTTP status of a WAN-side request, 000 when the connection is refused.
+wan_http() {
+    curl -sk -o /dev/null -m 20 -w '%{http_code}' "$1" 2> /dev/null
+}
+wan_set() {
+    console 'nft list set inet fw4 wan_admin_subnet' | sed -n 's/.*elements = { \(.*\) }.*/\1/p'
+}
+# Wait up to a minute for the set to hold $1.
+wait_set() {
+    local set
+    for _ in $(seq 12); do
+        set=$(wan_set)
+        [ "$set" = "$1" ] && break
+        sleep 5
+    done
+    echo "$set"
+}
+wan_access() {
+    check "SSH from the WAN side$1" "$2" "$(wan_ssh)"
+    check "LuCI over HTTPS from the WAN side$1" "$3" "$(wan_http "https://127.0.0.1:$WAN_HTTPS/")"
+    check "LuCI over HTTP from the WAN side$1" "$4" "$(wan_http "http://127.0.0.1:$WAN_HTTP/")"
+    check "ttyd from the WAN side$1" "$5" "$(wan_http "http://127.0.0.1:$WAN_TTYD/")"
+}
+check 'WAN admin set after boot' 10.0.2.0/24 "$(wait_set 10.0.2.0/24)"
+check 'WAN admin rule is IPv4 only' '1 0' \
+    "$(console 'nft list chain inet fw4 input_wan | grep Allow-Admin | grep -c "ip saddr @wan_admin_subnet"; nft list chain inet fw4 input_wan | grep -c "ip6.*Allow-Admin"' | xargs)"
+check 'ttyd from the LAN' 200 \
+    "$(lan curl -s -o /dev/null -m 20 -w '%{http_code}' "http://$LAN_ROUTER:7681/")"
+wan_access '' SSH-2.0 200 200 200
+console 'ifdown wan' > /dev/null
+check 'WAN admin set with the WAN down' '' "$(wait_set '')"
+wan_access ' with the WAN down' '' 000 000 000
+console 'ifup wan' > /dev/null
+check 'WAN admin set restored by the WAN coming up' 10.0.2.0/24 "$(wait_set 10.0.2.0/24)"
+wan_access ' after the WAN came up again' SSH-2.0 200 200 200

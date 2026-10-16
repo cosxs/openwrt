@@ -10,6 +10,8 @@
 
 防火墙出厂开启软件流量卸载，并关闭 fw4 在 input 链上的 SYN 限速（每秒 25 个、突发 50 个）：路由器把连接重定向到本机服务时，这些连接都经过 input 链，LAN 的突发新连接会超时。WAN 区域本来就拒绝新的入站连接。只在防火墙配置仍是出厂版本时修改，保留配置升级沿用用户设置。
 
+从 WAN 所在的子网可以管理路由器：SSH（22）、LuCI（80、443）和网页终端 ttyd（7681）只对这个子网开放，仅限 IPv4。`files/etc/hotplug.d/iface/30-wan-admin-subnet` 在 WAN 上线、地址更新或下线时，把 WAN 的子网写入防火墙集合 `wan_admin_subnet`；只有私有 IPv4 地址且前缀在 /24 到 /30 之间才会写入，也就是常见的上游家用路由器网段。公网地址、PPPoE 的 /32 地址、运营商分配的大网段（如 10.183.0.0/16）或 WAN 下线时集合为空，WAN 侧不开放任何端口；WAN 的公网 IPv6 地址始终不开放。集合文件在内存里，每次开机从空集合开始。需要额外放行的网段可以在 LuCI 的“防火墙 → IP 集”里给 `wan_admin_subnet` 添加条目。为了让 LuCI 的终端页面从 WAN 侧可用，ttyd 出厂监听所有地址，访问由这条防火墙规则控制。
+
 ## 网络出厂配置
 
 | 物理网口 | 分配与地址 | DHCP 服务 |
@@ -43,8 +45,8 @@
 
 - `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
 - `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
-- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载并关闭 SYN 限速，且都不覆盖设备自己的设置。
-- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、`192.168.72.1` 管理地址、SSH/HTTP/HTTPS 端口、网口分配、初始密码状态、流量卸载与 SYN 限速、sing-box 默认关闭及磁盘与挂载。串口仍使用上游的免密控制台。
+- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理规则、ttyd 监听所有地址，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
+- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、`192.168.72.1` 管理地址、SSH/HTTP/HTTPS 端口、网口分配、初始密码状态、流量卸载与 SYN 限速、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。串口仍使用上游的免密控制台。
 
 日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 
