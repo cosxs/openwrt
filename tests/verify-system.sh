@@ -19,8 +19,9 @@ generate() {
 generate
 expect system.@system[0].timezone CST-8
 expect system.@system[0].zonename Asia/Shanghai
+expect system.ntp.server 'ntp.aliyun.com ntp.tencent.com ntp.tuna.tsinghua.edu.cn time.ustc.edu.cn'
 [[ $(chroot "$root" /bin/sh -c 'TZ="$(uci -q get system.@system[0].timezone)" date -d @0 "+%Y-%m-%d %H:%M"') == '1970-01-01 08:00' ]]
-echo 'PASS: new system has Asia/Shanghai and libc reports UTC+8'
+echo 'PASS: new system has Asia/Shanghai, time servers in China and libc reports UTC+8'
 
 cp "$root/etc/config/system" "$work/system.kept"
 chroot "$root" /bin/sh -c 'CFG=/etc/board.json /bin/sh /etc/board.d/04-system-defaults'
@@ -33,6 +34,8 @@ for pair in 'CET-1CEST,M3.5.0,M10.5.0/3 Europe/Berlin' 'GMT0 UTC' 'CST-8 Asia/Ta
     chroot "$root" /sbin/uci set "system.@system[0].timezone=$timezone"
     chroot "$root" /sbin/uci set "system.@system[0].zonename=$zonename"
     chroot "$root" /sbin/uci set system.@system[0].hostname=kept-host
+    chroot "$root" /sbin/uci -q delete system.ntp.server
+    chroot "$root" /sbin/uci add_list system.ntp.server=time.example.org
     chroot "$root" /sbin/uci commit system
     cp "$root/etc/config/system" "$work/system.kept"
     rm "$root/etc/board.json"

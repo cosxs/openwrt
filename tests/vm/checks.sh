@@ -31,6 +31,9 @@ check 'no HTTPS on the LAN' closed \
 echo "== 存储与服务（串口控制台）"
 check 'system timezone' CST-8 "$(console 'uci -q get system.@system[0].timezone')"
 check 'system zone name' Asia/Shanghai "$(console 'uci -q get system.@system[0].zonename')"
+check 'time servers' 'ntp.aliyun.com ntp.tencent.com ntp.tuna.tsinghua.edu.cn time.ustc.edu.cn' \
+    "$(console 'uci -q get system.ntp.server')"
+check 'ntpd uses the first time server' 1 "$(console 'ps w | grep -c "[n]tpd .*-p ntp.aliyun.com"')"
 check 'WAN device' eth0 "$(console 'uci -q get network.wan.device')"
 check 'WAN protocol' dhcp "$(console 'uci -q get network.wan.proto')"
 check 'LAN device' br-lan "$(console 'uci -q get network.lan.device')"

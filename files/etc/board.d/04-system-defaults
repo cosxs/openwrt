@@ -1,11 +1,20 @@
 #!/bin/sh
 
-# Factory timezone. config_generate reads it only when it creates the system
-# configuration, so kept settings keep their own.
+# Factory timezone and time servers in mainland China. config_generate reads
+# them only when it creates the system configuration, so kept settings keep
+# their own.
 . /lib/functions/uci-defaults.sh
 
 board_config_update
 json_select_object system
 json_is_a timezone string || json_add_string timezone CST-8
+if ! json_is_a ntpserver array; then
+    json_select_array ntpserver
+    for server in ntp.aliyun.com ntp.tencent.com ntp.tuna.tsinghua.edu.cn \
+        time.ustc.edu.cn; do
+        json_add_string '' "$server"
+    done
+    json_close_array
+fi
 json_select ..
 board_config_flush
