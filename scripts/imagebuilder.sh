@@ -17,6 +17,11 @@ fi
 
 mkdir -p packages
 
+# Field $2 of the package metadata in APK file $1.
+apk_field() {
+    staging_dir/host/bin/apk --allow-untrusted adbdump "$1" |
+        sed -n "/^info:/,/^[a-z]/s/^  $2: //p"
+}
 # ImageBuilder generates and signs its own local index for these APK files.
 # apk finds local packages as <name>-<version>.apk, whatever the release asset
 # is called; both are read from the package metadata.
@@ -27,10 +32,6 @@ import_apk() {
     version=$(apk_field "$file" version)
     [[ -n $name && -n $version ]] || { echo "No package metadata in $file" >&2; exit 1; }
     cp "$file" "packages/$name-$version.apk"
-}
-apk_field() {
-    staging_dir/host/bin/apk --allow-untrusted adbdump "$1" |
-        sed -n "/^info:/,/^[a-z]/s/^  $2: //p"
 }
 import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
 
