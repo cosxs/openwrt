@@ -1,4 +1,4 @@
-# shellcheck shell=bash disable=SC2034 # variables for the scripts that source this
+# shellcheck shell=bash disable=SC2034 # its variables serve the callers
 # Helpers sourced by the VM test scripts, which run as root. The router is
 # reached from a client in network namespace "lanc" on the default LAN
 # address. The upstream ttylogin default leaves the serial console available
