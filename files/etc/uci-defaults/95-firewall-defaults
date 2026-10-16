@@ -14,6 +14,9 @@
 #   while that subnet is a private IPv4 /24 to /30, so a public,
 #   point-to-point or carrier-sized WAN subnet opens nothing. IPv4 only: the
 #   WAN's public IPv6 address stays closed.
+# - WireGuard: the interface "wireguard" of 97-wireguard-defaults joins the
+#   LAN zone, and its port, UDP 51820, is open to the WAN over IPv4.
+#   WireGuard answers nothing that a configured peer has not signed.
 cmp -s /etc/config/firewall /rom/etc/config/firewall || exit 0
 uci set firewall.@defaults[0].flow_offloading='1'
 uci -q delete firewall.@defaults[0].syn_flood
@@ -33,4 +36,16 @@ uci set firewall.wan_admin.proto='tcp'
 uci set firewall.wan_admin.dest_port='22 80 7681'
 uci set firewall.wan_admin.ipset='wan_admin_subnet'
 uci set firewall.wan_admin.target='ACCEPT'
+
+lan=$(uci show firewall | sed -n "s/^firewall\.\([^.]*\)\.name='lan'$/\1/p")
+for zone in $lan; do
+    uci add_list "firewall.$zone.network=wireguard"
+done
+uci set firewall.wg_in=rule
+uci set firewall.wg_in.name='Allow-WireGuard'
+uci set firewall.wg_in.src='wan'
+uci set firewall.wg_in.family='ipv4'
+uci set firewall.wg_in.proto='udp'
+uci set firewall.wg_in.dest_port='51820'
+uci set firewall.wg_in.target='ACCEPT'
 uci commit firewall

@@ -16,6 +16,17 @@
 
 LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带来的 `px5g-mbedtls`）。uhttpd 的出厂配置仍监听 443，找不到证书时自动跳过 HTTPS；把证书放到 `/etc/uhttpd.crt` 和 `/etc/uhttpd.key` 后重启 uhttpd 即启用 HTTPS，例如以后用自己域名申请的正式证书。不要在只有 HTTP 时把 LuCI 转发到公网。
 
+## WireGuard
+
+固件带 WireGuard 及其 LuCI 页面、对端状态和配置二维码（`qrencode`）。首次启动时 `files/etc/uci-defaults/97-wireguard-defaults` 创建接口 `wireguard`：地址 `10.66.66.1/24`，监听 UDP 51820，私钥在设备上生成，每台设备不同，仓库里不保存任何密钥；出厂没有对端。防火墙出厂把 `wireguard` 加入 LAN 区域，并对 WAN 放行 IPv4 UDP 51820。WireGuard 不回应没有已配置对端签名的数据包，没有对端时外部无法连接，也探测不到这个端口。
+
+添加设备：在 LuCI 的“网络 → 接口 → wireguard → 对端”中添加对端，每台设备使用自己的密钥对和不重复的地址（如 `10.66.66.2/32`、`10.66.66.3/32`）；客户端填写路由器的公钥、对外地址和端口 51820。路由器在上游路由器之后时，还需要在上游路由器上把 UDP 51820 转发到路由器的 WAN 地址。
+
+已有 `wireguard` 的配置（例如保留配置升级）保持不变；删除 `wireguard` 后，下次运行首次启动脚本（例如保留配置升级）会重新创建并生成新密钥，不使用时请在 LuCI 中停用接口而不是删除。
+
+路由器上同时运行 sing-box 等使用 TUN 接管本机流量的程序时，WireGuard 回复给对端的 UDP 包可能被接管并改变源地址，导致握手失败；需要在其配置中让 WireGuard 的流量直连（例如排除对端地址或使用防火墙标记）。
+
+
 ## 网络出厂配置
 
 | 物理网口 | 分配与地址 | DHCP 服务 |
@@ -49,8 +60,8 @@ LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带�
 
 - `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
 - `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
-- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、国内时间服务器、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理规则、ttyd 监听所有地址，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
-- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、时区与时间服务器、`192.168.72.1` 管理地址、SSH/HTTP 端口、未开启 HTTPS、网口分配、初始密码状态、流量卸载与 SYN 限速、TCP 调优参数生效、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。随后用同一镜像做一次保留配置的 `sysupgrade`：升级前修改主机名、防火墙选择、IP 集条目、ttyd 监听范围、root 密码并在 /data 写入标记，升级后检查这些都被保留、首次启动脚本没有覆盖它们也没有重复添加 fstab 条目。串口仍使用上游的免密控制台。
+- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、国内时间服务器、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理和 WireGuard 规则、ttyd 监听所有地址、WireGuard 接口在设备上生成密钥，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
+- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、时区与时间服务器、`192.168.72.1` 管理地址、SSH/HTTP 端口、未开启 HTTPS、网口分配、初始密码状态、流量卸载与 SYN 限速、TCP 调优参数生效、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。还从宿主机经 QEMU 转发的 UDP 端口用 WireGuard 连入，检查握手并经隧道访问路由器的 SSH 和 LuCI。随后用同一镜像做一次保留配置的 `sysupgrade`：升级前修改主机名、防火墙选择、IP 集条目、ttyd 监听范围、root 密码并在 /data 写入标记，升级后检查这些以及 WireGuard 的密钥、对端和隧道都被保留、首次启动脚本没有覆盖它们也没有重复添加 fstab 条目。串口仍使用上游的免密控制台。
 
 日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 

@@ -17,6 +17,7 @@ console "uci set firewall.@defaults[0].flow_offloading=0 && uci set firewall.@de
 console "uci set 'ttyd.@ttyd[0].interface=@lan' && uci commit ttyd" > /dev/null
 console "sed -i 's|^root:[^:]*:|root:kept-password-hash:|' /etc/shadow" > /dev/null
 console 'echo kept > /data/marker' > /dev/null
+wg_key_before=$(console 'wg show wireguard public-key')
 
 echo "== 下载固件并执行保留配置的 sysupgrade"
 python3 -m http.server "$port" --bind 127.0.0.1 --directory "${image%/*}" > /dev/null 2>&1 &
@@ -63,3 +64,7 @@ check '/data mounted from the data partition' '/dev/nvme0n1p4 ext4' \
     "$(console "awk '\$2 == \"/data\" {print \$1, \$3}' /proc/mounts")"
 check 'swap in use' '/dev/nvme0n1p3 partition' \
     "$(console "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
+check 'WireGuard key kept' "$wg_key_before" "$(console 'wg show wireguard public-key')"
+check 'WireGuard peer kept' 10.66.66.2/32 "$(console 'uci -q get network.vmtest.allowed_ips')"
+check 'ping the router through the tunnel after the upgrade' ok \
+    "$(ip netns exec wgc ping -c 3 -W 3 10.66.66.1 > /dev/null 2>&1 && echo ok || echo failed)"

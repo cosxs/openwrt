@@ -1,0 +1,17 @@
+#!/bin/sh
+
+# Factory WireGuard interface "wireguard" without peers: 10.66.66.1/24 on
+# UDP port 51820, with a private key generated on this device, so no two
+# devices share one. Peers are added in LuCI. 95-firewall-defaults puts the
+# interface into the LAN zone and opens its port to the WAN. A configuration
+# that already has it, e.g. from kept settings, is left unchanged; one
+# without it, e.g. after it was deleted, gets it back with a new key, so
+# disable the interface rather than delete it to turn it off.
+uci -q get network.wireguard > /dev/null && exit 0
+key=$(wg genkey) && [ -n "$key" ] || exit 1
+uci set network.wireguard=interface
+uci set network.wireguard.proto='wireguard'
+uci set network.wireguard.private_key="$key"
+uci set network.wireguard.listen_port='51820'
+uci add_list network.wireguard.addresses='10.66.66.1/24'
+uci commit network

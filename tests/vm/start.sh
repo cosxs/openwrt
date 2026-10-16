@@ -32,6 +32,7 @@ wan=user,id=wan
 for forward in "$WAN_SSH:22" "$WAN_HTTP:80" "$WAN_TTYD:7681"; do
     wan+=",hostfwd=tcp:127.0.0.1:${forward%:*}-:${forward#*:}"
 done
+wan+=",hostfwd=udp:127.0.0.1:$WAN_WG-:51820"
 qemu-system-x86_64 -machine q35 "${accel[@]}" -smp 2 -m 2048 \
     -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
     -drive if=pflash,format=raw,file="$VM_WORK/ovmf_vars.fd" \

@@ -24,3 +24,9 @@ luci-app-ttyd
 luci-i18n-ttyd-zh-cn
 # Network throughput measurement.
 iperf3
+# WireGuard, its LuCI page and peer status, and QR codes for peer settings.
+kmod-wireguard
+wireguard-tools
+luci-proto-wireguard
+rpcd-mod-wireguard
+qrencode

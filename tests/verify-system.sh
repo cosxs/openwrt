@@ -159,13 +159,23 @@ expect firewall.wan_admin.proto tcp
 expect firewall.wan_admin.dest_port '22 80 7681'
 expect firewall.wan_admin.ipset wan_admin_subnet
 expect firewall.wan_admin.target ACCEPT
+expect 'firewall.@zone[0].name' lan
+expect 'firewall.@zone[0].network' 'lan wireguard'
+expect firewall.wg_in rule
+expect firewall.wg_in.src wan
+expect firewall.wg_in.family ipv4
+expect firewall.wg_in.proto udp
+expect firewall.wg_in.dest_port 51820
+expect firewall.wg_in.target ACCEPT
 # Nothing else in the firewall configuration changes.
 chroot "$root" /sbin/uci -q show firewall |
     grep -v -e '^firewall\.@defaults\[0\]\.flow_offloading=' \
         -e '^firewall\.@defaults\[0\]\.synflood_protect=' \
-        -e '^firewall\.wan_admin_subnet[.=]' -e '^firewall\.wan_admin[.=]' |
+        -e '^firewall\.wan_admin_subnet[.=]' -e '^firewall\.wan_admin[.=]' \
+        -e '^firewall\.wg_in[.=]' |
+    sed "s/^\(firewall\.@zone\[0\]\.network=.*\) 'wireguard'$/\1/" |
     cmp - <(grep -v '^firewall\.@defaults\[0\]\.syn_flood=' "$work/firewall.shipped")
-echo 'PASS: the firewall default sets offloading, the SYN limit and the WAN admin rule'
+echo 'PASS: the firewall default sets offloading, the SYN limit, the WAN admin and WireGuard rules'
 cp "$firewall" "$work/firewall.initial"
 chroot "$root" /bin/sh "$script"
 cmp "$firewall" "$work/firewall.initial"
@@ -177,6 +187,37 @@ cp "$firewall" "$work/firewall.kept"
 chroot "$root" /bin/sh "$script"
 cmp "$firewall" "$work/firewall.kept"
 echo 'PASS: a firewall restored from kept settings keeps its choices'
+
+script=/etc/uci-defaults/97-wireguard-defaults
+network="$root/etc/config/network"
+expect network.wireguard ''
+chroot "$root" /bin/sh "$script"
+expect network.wireguard interface
+expect network.wireguard.proto wireguard
+expect network.wireguard.listen_port 51820
+expect network.wireguard.addresses 10.66.66.1/24
+key=$(chroot "$root" /sbin/uci -q get network.wireguard.private_key)
+[[ $key =~ ^[A-Za-z0-9+/]{43}=$ ]]
+[[ $(chroot "$root" /bin/sh -c "echo '$key' | wg pubkey") =~ ^[A-Za-z0-9+/]{43}=$ ]]
+echo 'PASS: the WireGuard default makes wireguard with a key generated on the device'
+cp "$network" "$work/network.wg"
+chroot "$root" /bin/sh "$script"
+cmp "$network" "$work/network.wg"
+echo 'PASS: the WireGuard default is idempotent'
+chroot "$root" /sbin/uci set network.wireguard.listen_port=51999
+chroot "$root" /sbin/uci set network.kept_peer=wireguard_wireguard
+chroot "$root" /sbin/uci set network.kept_peer.public_key=kept-peer-key
+chroot "$root" /sbin/uci commit network
+cp "$network" "$work/network.kept"
+chroot "$root" /bin/sh "$script"
+cmp "$network" "$work/network.kept"
+echo 'PASS: a kept wireguard and its peers stay unchanged'
+chroot "$root" /sbin/uci delete network.wireguard
+chroot "$root" /sbin/uci commit network
+chroot "$root" /bin/sh "$script"
+[[ $(chroot "$root" /sbin/uci -q get network.wireguard.private_key) != "$key" ]]
+expect network.wireguard.listen_port 51820
+echo 'PASS: a deleted wireguard comes back with a new key'
 
 script=/etc/uci-defaults/96-ttyd-defaults
 ttyd="$root/etc/config/ttyd"

@@ -13,6 +13,7 @@ LAN_ROUTER=192.168.72.1
 WAN_SSH=20022
 WAN_HTTP=20080
 WAN_TTYD=27681
+WAN_WG=21820
 
 # Run a command in the VM through the serial console and print its output.
 console() {

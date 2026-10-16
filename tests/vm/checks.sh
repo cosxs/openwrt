@@ -98,3 +98,37 @@ wan_access ' with the WAN down' '' 000 000
 console 'ifup wan' > /dev/null
 check 'WAN admin set restored by the WAN coming up' 10.0.2.0/24 "$(wait_set 10.0.2.0/24)"
 wan_access ' after the WAN came up again' SSH-2.0 200 200
+
+echo "== WireGuard"
+check 'WireGuard interface address' 10.66.66.1/24 "$(console 'ip -c=never -4 -o addr show dev wireguard' | awk '{print $4}')"
+check 'WireGuard listening port' 51820 "$(console 'wg show wireguard listen-port')"
+# A client in network namespace "wgc" reaches the router's "wireguard"
+# interface through QEMU's forward of host UDP $WAN_WG to the WAN. The client
+# interface is made in the host namespace, where its UDP socket stays, and
+# then moved to wgc, which holds its routes.
+client_key=$(wg genkey)
+router_key=$(console 'wg show wireguard public-key')
+console "uci set network.vmtest=wireguard_wireguard && uci set network.vmtest.public_key='$(wg pubkey <<< "$client_key")' && uci add_list network.vmtest.allowed_ips=10.66.66.2/32 && uci commit network && ifup wireguard" > /dev/null
+ip netns add wgc 2> /dev/null || true
+ip -n wgc link del wg-vm 2> /dev/null || true
+ip link del wg-vm 2> /dev/null || true
+ip link add wg-vm type wireguard
+wg set wg-vm private-key <(echo "$client_key") peer "$router_key" \
+    endpoint "127.0.0.1:$WAN_WG" allowed-ips 10.66.66.1/32,192.168.72.0/24 persistent-keepalive 5
+ip link set wg-vm netns wgc
+ip -n wgc address add 10.66.66.2/32 dev wg-vm
+ip -n wgc link set wg-vm up
+ip -n wgc route add 10.66.66.1/32 dev wg-vm
+ip -n wgc route add 192.168.72.0/24 dev wg-vm
+wgc() {
+    ip netns exec wgc "$@"
+}
+check 'ping the router through the tunnel' ok \
+    "$(wgc ping -c 3 -W 3 10.66.66.1 > /dev/null 2>&1 && echo ok || echo failed)"
+check 'SSH on the LAN address through the tunnel' SSH-2.0 \
+    "$(wgc timeout 10 bash -c "exec 3<> /dev/tcp/$LAN_ROUTER/22 && head -c 7 <&3" 2> /dev/null)"
+check 'LuCI on the LAN address through the tunnel' 200 \
+    "$(wgc curl -s -o /dev/null -m 20 -w '%{http_code}' "http://$LAN_ROUTER/")"
+check 'router saw a handshake from the client' 10.0.2.2 \
+    "$(console 'wg show wireguard endpoints' | awk '$2 != "(none)" {split($2, a, ":"); print a[1]}')"
+
