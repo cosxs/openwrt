@@ -219,6 +219,30 @@ chroot "$root" /bin/sh "$script"
 expect network.wireguard.listen_port 51820
 echo 'PASS: a deleted wireguard comes back with a new key'
 
+script=/etc/uci-defaults/98-ddns-defaults
+ddns="$root/etc/config/ddns"
+expect ddns.myddns_ipv4 service
+expect ddns.myddns_ipv6 service
+mkdir -p "$root/rom/etc/config"
+cp "$ddns" "$root/rom/etc/config/ddns"
+chroot "$root" /bin/sh "$script"
+expect ddns.myddns_ipv4 ''
+expect ddns.myddns_ipv6 ''
+expect ddns.global ddns
+expect ddns.global.upd_privateip 0
+echo 'PASS: the DDNS default removes the example services and keeps the global settings'
+cp "$ddns" "$work/ddns.initial"
+chroot "$root" /bin/sh "$script"
+cmp "$ddns" "$work/ddns.initial"
+echo 'PASS: the DDNS default is idempotent'
+chroot "$root" /sbin/uci set ddns.home=service
+chroot "$root" /sbin/uci set ddns.home.service_name=cloudflare.com-v4
+chroot "$root" /sbin/uci commit ddns
+cp "$ddns" "$work/ddns.kept"
+chroot "$root" /bin/sh "$script"
+cmp "$ddns" "$work/ddns.kept"
+echo 'PASS: a DDNS configuration restored from kept settings keeps its services'
+
 script=/etc/uci-defaults/96-ttyd-defaults
 ttyd="$root/etc/config/ttyd"
 expect 'ttyd.@ttyd[0].interface' @lan

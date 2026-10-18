@@ -1,0 +1,10 @@
+#!/bin/sh
+
+# The upstream dynamic DNS configuration ships two disabled example services
+# with placeholder hosts and accounts, one of them for a provider that is not
+# installed. Remove them while the configuration is still the shipped one,
+# so a configuration restored from kept settings keeps its own services.
+cmp -s /etc/config/ddns /rom/etc/config/ddns || exit 0
+uci -q delete ddns.myddns_ipv4
+uci -q delete ddns.myddns_ipv6
+uci commit ddns

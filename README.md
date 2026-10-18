@@ -2,7 +2,7 @@
 
 从官方 OpenWrt `x86/64 / generic` 出发的基线，使用官方 ImageBuilder 和默认软件包，通过 `profiles/packages.txt` 与 `files/` 逐项增加定制。
 
-本基线不集成 Docker、DDNS、UPnP 或 NextTrace。
+本基线不集成 Docker、UPnP 或 NextTrace。
 
 初始登录使用 `root` / `159357`。首次启动脚本仅在 root 密码为空时设置该密码；保留配置升级时沿用已有密码，恢复出厂后重新使用初始密码。串口登录仍沿用上游的 `ttylogin` 默认设置，与网络登录密码独立。
 
@@ -26,6 +26,24 @@ LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带�
 
 路由器上同时运行 sing-box 等使用 TUN 接管本机流量的程序时，WireGuard 回复给对端的 UDP 包可能被接管并改变源地址，导致握手失败；需要在其配置中让 WireGuard 的流量直连（例如排除对端地址或使用防火墙标记）。
 
+
+## DDNS
+
+固件带 `ddns-scripts`、Cloudflare 插件 `ddns-scripts-cloudflare` 及其 LuCI 页面，出厂没有任何服务条目：`files/etc/uci-defaults/98-ddns-defaults` 在配置仍是出厂版本时删除上游自带的两条示例（`myddns_ipv4`、`myddns_ipv6`，主机和账号都是占位文字），保留配置升级沿用设备上的条目。域名和 Cloudflare API 令牌只在设备上填写，不进固件和仓库。上游的全局设置 `upd_privateip 0` 保持不变，它拒绝把私有地址写进 DNS。
+
+在 LuCI 的“服务 → 动态 DNS”中添加服务，推荐设置：
+
+| 设置 | 推荐值 | 理由 |
+|---|---|---|
+| 服务商 | `cloudflare.com-v4` | 固件只带 Cloudflare 插件 |
+| 记录 | 只更新 A 记录（IPv4） | WireGuard 和 WAN 侧管理只对 IPv4 开放 |
+| 获取 IP 的方式 | 网页（`ip_source` 为 `web`） | 路由器在上游路由器之后时，WAN 是内网地址，只能向外部网站查询公网 IP |
+| 查询网址（`ip_url`） | 国内的查询服务，例如 `https://ip.3322.net` | 上游没有默认值；路由器上运行代理时，国外的查询网站可能经代理返回节点的地址 |
+| 检查间隔 | 5 分钟 | 公网 IP 变化后几分钟内更新 |
+| Cloudflare 侧 | TTL 60 秒，关闭代理（灰色云朵） | Cloudflare 代理不转发 WireGuard 的 UDP |
+| API 令牌 | 只授权编辑该域名的 DNS | 令牌泄露时影响范围最小 |
+
+DDNS 只更新 DNS 记录，不提供公网 IPv4：路由器在上游路由器之后时，WireGuard 等服务仍需要上游路由器的端口转发。
 
 ## 网络出厂配置
 
@@ -60,8 +78,8 @@ LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带�
 
 - `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
 - `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
-- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、国内时间服务器、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理和 WireGuard 规则、ttyd 监听所有地址、WireGuard 接口在设备上生成密钥，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
-- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、时区与时间服务器、`192.168.72.1` 管理地址、SSH/HTTP 端口、未开启 HTTPS、网口分配、初始密码状态、流量卸载与 SYN 限速、TCP 调优参数生效、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。还从宿主机经 QEMU 转发的 UDP 端口用 WireGuard 连入，检查握手并经隧道访问路由器的 SSH 和 LuCI。随后用同一镜像做一次保留配置的 `sysupgrade`：升级前修改主机名、防火墙选择、IP 集条目、ttyd 监听范围、root 密码并在 /data 写入标记，升级后检查这些以及 WireGuard 的密钥、对端和隧道都被保留、首次启动脚本没有覆盖它们也没有重复添加 fstab 条目。串口仍使用上游的免密控制台。
+- `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、国内时间服务器、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理和 WireGuard 规则、ttyd 监听所有地址、WireGuard 接口在设备上生成密钥、删除 DDNS 示例条目，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
+- `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、时区与时间服务器、`192.168.72.1` 管理地址、SSH/HTTP 端口、未开启 HTTPS、网口分配、初始密码状态、流量卸载与 SYN 限速、TCP 调优参数生效、DDNS 服务启用且没有示例条目、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。还从宿主机经 QEMU 转发的 UDP 端口用 WireGuard 连入，检查握手并经隧道访问路由器的 SSH 和 LuCI。随后用同一镜像做一次保留配置的 `sysupgrade`：升级前添加 DDNS 条目，修改主机名、防火墙选择、IP 集条目、ttyd 监听范围、root 密码并在 /data 写入标记，升级后检查这些以及 DDNS 条目、WireGuard 的密钥、对端和隧道都被保留、首次启动脚本没有覆盖它们也没有重复添加 fstab 条目。串口仍使用上游的免密控制台。
 
 日常小改动先做针对性验证，阶段验收时再统一构建并跑完整 VM 测试。
 

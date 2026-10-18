@@ -30,3 +30,8 @@ wireguard-tools
 luci-proto-wireguard
 rpcd-mod-wireguard
 qrencode
+# Dynamic DNS with Cloudflare, and its LuCI page.
+ddns-scripts
+ddns-scripts-cloudflare
+luci-app-ddns
+luci-i18n-ddns-zh-cn

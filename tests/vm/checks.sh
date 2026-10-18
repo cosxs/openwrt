@@ -51,6 +51,11 @@ check 'swap in use' '/dev/nvme0n1p3 partition' \
     "$(console "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
 check 'sing-box enabled in UCI' 0 "$(console 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(console 'pidof sing-box > /dev/null && echo yes || echo no')"
+check 'DDNS sections' global \
+    "$(console "uci -q show ddns | sed -n 's/^ddns\\.\\([^.=]*\\)=.*/\\1/p' | xargs")"
+check 'DDNS service enabled' yes "$(console '/etc/init.d/ddns enabled && echo yes || echo no')"
+check 'Cloudflare DDNS provider' yes \
+    "$(console '[ -f /usr/share/ddns/default/cloudflare.com-v4.json ] && echo yes || echo no')"
 tcp_keys=(net.core.rmem_max net.core.wmem_max net.ipv4.tcp_rmem net.ipv4.tcp_wmem
     net.ipv4.tcp_slow_start_after_idle net.ipv4.tcp_mtu_probing
     net.ipv4.tcp_notsent_lowat net.core.netdev_max_backlog
