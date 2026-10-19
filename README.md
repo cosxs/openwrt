@@ -85,6 +85,11 @@ DDNS 只更新 DNS 记录，不提供公网 IPv4：路由器在上游路由器�
 
 ## GitHub Actions
 
-工作流 `Build firmware`（`.github/workflows/build.yml`）只能手动运行，推送代码不会触发。它按 `profiles/build.env` 固定的版本构建镜像，依次运行 `scripts/verify-image.sh`、`tests/verify-network.sh`、`tests/verify-system.sh` 和含保留配置升级的 `tests/vm/`，把镜像、包清单、构建记录和测试日志保存为工作流产物，保留 30 天。
+工作流 `Build firmware`（`.github/workflows/build.yml`）每天北京时间 03:37 定时运行，也可以手动运行；推送代码不会触发。每次运行先执行 `scripts/update-pins.sh`，把 `profiles/build.env` 中的 OpenWrt（同一发布系列内）、ImageBuilder 和 sing-box 更新到上游最新版本：
 
-工作流不更新固定版本、不发布 Release，也不会自动刷机：版本由人工运行 `scripts/update-pins.sh` 并提交。
+- 定时运行且版本没有变化时到此结束，不构建。
+- 版本有变化或手动运行时，构建镜像，依次运行 `scripts/verify-image.sh`、`tests/verify-network.sh`、`tests/verify-system.sh` 和含保留配置升级的 `tests/vm/`，把镜像、包清单、构建记录和测试日志保存为工作流产物，保留 30 天。
+- 版本有变化且全部测试通过时，以 `github-actions[bot]` 的身份把新的 `profiles/build.env` 提交到运行所在的分支；任何一步失败都不提交，版本保持原样。
+- 出现更新的 OpenWrt 发布系列，或上游未改版本号就替换了已固定的文件时，运行页面显示警告，不自动切换。
+
+工作流不发布 Release，也不会自动刷机。
