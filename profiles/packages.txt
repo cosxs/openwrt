@@ -18,6 +18,12 @@ parted
 # newest release) is newer than the official feed's sing-box; verify-image.sh
 # fails if another version is chosen.
 sing-box
+# Hako, the sing-box client, with its LuCI page. The packages come from the
+# pinned Hako release; it runs sing-box itself, with the service of the
+# sing-box package left off.
+hako
+luci-app-hako
+luci-i18n-hako-zh-cn
 # Web terminal and its LuCI page.
 ttyd
 luci-app-ttyd

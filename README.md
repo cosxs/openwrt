@@ -27,6 +27,10 @@ LuCI 只提供 HTTP，镜像不带生成自签证书的工具（`luci-ssl` 带�
 路由器上同时运行 sing-box 等使用 TUN 接管本机流量的程序时，WireGuard 回复给对端的 UDP 包可能被接管并改变源地址，导致握手失败；需要在其配置中让 WireGuard 的流量直连（例如排除对端地址或使用防火墙标记）。
 
 
+## Hako
+
+固件带 [Hako](https://github.com/cosxs/hako)（`hako`、`luci-app-hako` 及其中文语言包），在 LuCI 中管理 sing-box，全屏界面在 `http://路由器/hako/`。软件包取自 Hako 发布页的 `hako_openwrt-<系列>.tar.gz`，版本和 SHA256 固定在 `profiles/build.env`。Hako 出厂不启用（`hako.main.enabled` 为 `0`），填好配置后在 Hako 页面中启用。Hako 自己运行固件里的 sing-box，sing-box 软件包自带的服务保持关闭。
+
 ## DDNS
 
 固件带 `ddns-scripts`、Cloudflare 插件 `ddns-scripts-cloudflare` 及其 LuCI 页面，出厂没有任何服务条目：`files/etc/uci-defaults/98-ddns-defaults` 在配置仍是出厂版本时删除上游自带的两条示例（`myddns_ipv4`、`myddns_ipv6`，主机和账号都是占位文字），保留配置升级沿用设备上的条目。域名和 Cloudflare API 令牌只在设备上填写，不进固件和仓库。上游的全局设置 `upd_privateip 0` 保持不变，它拒绝把私有地址写进 DNS。
@@ -62,7 +66,7 @@ DDNS 只更新 DNS 记录，不提供公网 IPv4：路由器在上游路由器�
 
 ## 版本
 
-`profiles/build.env` 固定 OpenWrt 版本和官方 ImageBuilder 容器的 digest。`scripts/update-pins.sh` 把它们更新到同一系列（现为 25.12.x）的最新补丁版本；出现新的发布系列时只输出 `notice:`，不自动切换，需要人工评估。
+`profiles/build.env` 固定 OpenWrt 版本和官方 ImageBuilder 容器的 digest。`scripts/update-pins.sh` 把它们更新到同一系列（现为 25.12.x）的最新补丁版本，sing-box 和 Hako 更新到各自最新的发布；Hako 还没有发布时只输出 `notice:`，此时构建会失败。出现新的发布系列时只输出 `notice:`，不自动切换，需要人工评估。
 
 ## 构建
 
@@ -76,7 +80,7 @@ DDNS 只更新 DNS 记录，不提供公网 IPv4：路由器在上游路由器�
 
 ## 检查与测试
 
-- `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 是固定的版本。
+- `scripts/verify-image.sh`：在 ImageBuilder 容器里运行 `scripts/verify-rootfs.sh`，解开 rootfs 镜像，检查版本和目标与 `build.env` 一致、有 init、procd 和 dropbear、`lib/apk/db/installed` 里的包与本次解析出的 manifest 完全一致，并且 sing-box 和 Hako 是固定的版本。
 - `tests/verify-network.sh <解包的rootfs目录>`：在 x86-64 Linux 上以 root 运行，复制 rootfs 后使用真实的 OpenWrt 初始化工具验证单口、双口、多口、虚拟接口过滤和保留配置。只模拟硬件枚举，不修改输入 rootfs，也不构建镜像。
 - `tests/verify-system.sh <解包的rootfs目录>`：使用实际初始化工具验证上海时区、UTC+8、国内时间服务器、保留用户设置、DMI 占位符回退和正常型号识别，以及首次启动脚本只在 root 密码为空时设置初始密码、sing-box 出厂关闭、防火墙开启流量卸载、关闭 SYN 限速并添加 WAN 子网管理和 WireGuard 规则、ttyd 监听所有地址、WireGuard 接口在设备上生成密钥、删除 DDNS 示例条目，且都不覆盖设备自己的设置；还用镜像里的 `ipcalc.sh` 验证 WAN 子网识别在各种地址下的结果。
 - `tests/vm/`：用 QEMU（UEFI、NVMe、两个 e1000e 网口）启动 combined EFI 镜像，`eth0` 接模拟上游，`eth1` 接 LAN 客户端。检查启动、时区与时间服务器、`192.168.72.1` 管理地址、SSH/HTTP 端口、未开启 HTTPS、网口分配、初始密码状态、流量卸载与 SYN 限速、TCP 调优参数生效、DDNS 服务启用且没有示例条目、sing-box 默认关闭及磁盘与挂载，并通过 QEMU 端口转发从 WAN 侧访问 SSH、LuCI 和 ttyd，检查 WAN 下线后拒绝、重新上线后恢复。还从宿主机经 QEMU 转发的 UDP 端口用 WireGuard 连入，检查握手并经隧道访问路由器的 SSH 和 LuCI。随后用同一镜像做一次保留配置的 `sysupgrade`：升级前添加 DDNS 条目，修改主机名、防火墙选择、IP 集条目、ttyd 监听范围、root 密码并在 /data 写入标记，升级后检查这些以及 DDNS 条目、WireGuard 的密钥、对端和隧道都被保留、首次启动脚本没有覆盖它们也没有重复添加 fstab 条目。串口仍使用上游的免密控制台。

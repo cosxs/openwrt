@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
 # Move the pinned build inputs in profiles/build.env to the latest upstream
 # releases: the newest OpenWrt point release of the pinned series with its
-# ImageBuilder digest, and sing-box. Each new asset is downloaded and hashed,
+# ImageBuilder digest, sing-box and Hako. Each new asset is downloaded and hashed,
 # and checked against the digest GitHub publishes for it.
 #
 # Prints "KEY: old -> new" per change. Lines starting with "notice:" need a
 # person: a newer OpenWrt release series, which needs a manual review, or an
-# asset replaced upstream without a new version, which stays pinned.
+# asset replaced upstream without a new version, which stays pinned, or no
+# Hako release yet.
 # Needs curl and jq; GH_TOKEN, when set, authenticates GitHub API requests.
 set -euo pipefail
 
@@ -26,6 +27,19 @@ github_release() {
     [[ -z ${GH_TOKEN:-} ]] || auth=(-H "Authorization: Bearer $GH_TOKEN")
     fetch -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} \
         "https://api.github.com/repos/$1/releases/latest"
+}
+# Whether repository $1 has published a release.
+has_release() {
+    local auth=() status
+    [[ -z ${GH_TOKEN:-} ]] || auth=(-H "Authorization: Bearer $GH_TOKEN")
+    status=$(curl --silent --show-error --location --retry 3 -o /dev/null -w '%{http_code}' \
+        -H 'Accept: application/vnd.github+json' ${auth[@]+"${auth[@]}"} \
+        "https://api.github.com/repos/$1/releases/latest")
+    case $status in
+        200) return 0 ;;
+        404) return 1 ;;
+        *) echo "GitHub API returned $status for $1" >&2; exit 1 ;;
+    esac
 }
 asset_field() {
     jq -r --arg n "$2" ".assets[] | select(.name == \$n) | $3 // empty" <<< "$1"
@@ -94,4 +108,23 @@ if [[ $version != "$SINGBOX_VERSION" ]]; then
     set_var SINGBOX_APK_SHA256 "$sha256"
 else
     check_unchanged "$release" "$asset" "$SINGBOX_APK_SHA256"
+fi
+
+# Hako packages for the pinned OpenWrt series, as one tarball; the tag is the
+# package version with a leading v.
+hako_asset="hako_openwrt-${series}.tar.gz"
+if ! has_release cosxs/hako; then
+    echo "notice: cosxs/hako has no release yet; Hako stays unpinned and the build fails"
+else
+    release=$(github_release cosxs/hako)
+    version=$(jq -r .tag_name <<< "$release")
+    version=${version#v}
+    if [[ $version != "$HAKO_VERSION" ]]; then
+        sha256=$(fetch_asset "$release" "$hako_asset")
+        set_var HAKO_VERSION "$version"
+        set_var HAKO_TARBALL_URL "$(asset_field "$release" "$hako_asset" .browser_download_url)"
+        set_var HAKO_TARBALL_SHA256 "$sha256"
+    else
+        check_unchanged "$release" "$hako_asset" "$HAKO_TARBALL_SHA256"
+    fi
 fi
