@@ -26,14 +26,26 @@ apk_field() {
 # apk finds local packages as <name>-<version>.apk, whatever the release asset
 # is called; both are read from the package metadata.
 import_apk() {
-    local file=$1 sha256=$2 name version
-    echo "$sha256  $file" | sha256sum --check --status
+    local file=$1 name version
     name=$(apk_field "$file" name)
     version=$(apk_field "$file" version)
     [[ -n $name && -n $version ]] || { echo "No package metadata in $file" >&2; exit 1; }
     cp "$file" "packages/$name-$version.apk"
 }
-import_apk "/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" "$SINGBOX_APK_SHA256"
+verify() {
+    echo "$2  $1" | sha256sum --check --status
+}
+singbox_apk=/work/.build/downloads/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk
+verify "$singbox_apk" "$SINGBOX_APK_SHA256"
+import_apk "$singbox_apk"
+# The Hako release holds hako, luci-app-hako and its translations.
+hako_tarball=/work/.build/downloads/hako_${HAKO_VERSION}.tar.gz
+verify "$hako_tarball" "$HAKO_TARBALL_SHA256"
+mkdir -p /tmp/hako
+tar -xzf "$hako_tarball" -C /tmp/hako
+for apk in /tmp/hako/*.apk; do
+    import_apk "$apk"
+done
 
 packages=$(sed '/^[[:space:]]*#/d; /^[[:space:]]*$/d' \
     /work/profiles/packages.txt | tr '\n' ' ')

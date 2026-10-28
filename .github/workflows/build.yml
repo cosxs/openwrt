@@ -2,8 +2,8 @@ name: Build firmware
 
 # Runs daily and on demand. Each run first moves the pins in
 # profiles/build.env to the latest upstream releases of the pinned OpenWrt
-# series and of sing-box. A scheduled run whose pins did not move stops
-# there. Otherwise the run builds the image, checks what it contains, tests
+# series, of sing-box and of Hako. A scheduled run whose pins did not move
+# stops there. Otherwise the run builds the image, checks what it contains, tests
 # the network and system defaults on its root file system, boots it in a VM
 # for the first-boot checks and a keep-settings upgrade, and keeps the image
 # with its records as a workflow artifact. When the pins moved and every test

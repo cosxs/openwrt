@@ -26,3 +26,7 @@ echo "PASS: the installed packages are exactly the resolved manifest"
 
 grep -Eqx "sing-box - $SINGBOX_VERSION(-r[0-9]+)?" /tmp/installed.txt
 echo "PASS: the installed sing-box is the pinned $SINGBOX_VERSION"
+
+grep -Eqx "hako - $HAKO_VERSION(-r[0-9]+)?" /tmp/installed.txt
+grep -Eqx "luci-app-hako - $HAKO_VERSION(-r[0-9]+)?" /tmp/installed.txt
+echo "PASS: the installed Hako is the pinned $HAKO_VERSION"

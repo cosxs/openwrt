@@ -44,6 +44,13 @@ fetch_verified() {
 fetch_verified "$SINGBOX_APK_URL" \
     "$download_dir/sing-box_${SINGBOX_VERSION}_openwrt_x86_64.apk" \
     "$SINGBOX_APK_SHA256"
+[[ -n $HAKO_TARBALL_URL ]] || {
+    echo 'No Hako release is pinned; run scripts/update-pins.sh once one is published.' >&2
+    exit 1
+}
+fetch_verified "$HAKO_TARBALL_URL" \
+    "$download_dir/hako_${HAKO_VERSION}.tar.gz" \
+    "$HAKO_TARBALL_SHA256"
 
 # fakeroot closes every possible descriptor on start; hosts whose containers
 # inherit an unlimited nofile limit would make that loop appear to hang.
@@ -61,9 +68,9 @@ run_id=$(date -u +%Y%m%dT%H%M%SZ)
 output_dir="$project_dir/artifacts/$OPENWRT_VERSION/$run_id"
 mkdir -p "$output_dir"
 cp "$profile_file" "$output_dir/build.env"
-printf 'recipe_revision=%s\nsingbox_apk_sha256=%s\n' \
+printf 'recipe_revision=%s\nsingbox_apk_sha256=%s\nhako_tarball_sha256=%s\n' \
     "$(git -C "$project_dir" rev-parse HEAD 2>/dev/null || printf uncommitted)" \
-    "$SINGBOX_APK_SHA256" > "$output_dir/build-info.txt"
+    "$SINGBOX_APK_SHA256" "$HAKO_TARBALL_SHA256" > "$output_dir/build-info.txt"
 
 container_id=''
 cleanup() {

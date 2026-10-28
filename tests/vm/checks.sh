@@ -51,6 +51,10 @@ check 'swap in use' '/dev/nvme0n1p3 partition' \
     "$(console "awk 'NR == 2 {print \$1, \$2}' /proc/swaps")"
 check 'sing-box enabled in UCI' 0 "$(console 'uci -q get sing-box.main.enabled')"
 check 'sing-box running' no "$(console 'pidof sing-box > /dev/null && echo yes || echo no')"
+check 'Hako enabled in UCI' 0 "$(console 'uci -q get hako.main.enabled')"
+check 'Hako default profile' yes "$(console '[ -f /etc/config/hako_default ] && echo yes || echo no')"
+check 'Hako full-screen page' 200 \
+    "$(lan curl -s -o /dev/null -m 10 -w '%{http_code}' "http://$LAN_ROUTER/hako/" 2> /dev/null)"
 check 'DDNS sections' global \
     "$(console "uci -q show ddns | sed -n 's/^ddns\\.\\([^.=]*\\)=.*/\\1/p' | xargs")"
 check 'DDNS service enabled' yes "$(console '/etc/init.d/ddns enabled && echo yes || echo no')"
